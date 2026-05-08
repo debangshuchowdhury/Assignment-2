@@ -4,7 +4,6 @@ begin
     using LinearAlgebra
     using solvers
     using Statistics
-    using solvers
     using Plots
     pythonplot()
 
