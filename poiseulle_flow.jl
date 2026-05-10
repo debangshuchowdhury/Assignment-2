@@ -80,17 +80,21 @@ function apply_BC!(u, v, P, U_ref, P_ref)
 end
 
 
-
-function y_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
+function v_coefficients(u, v, dx, dy, Re, Nx, Ny)
     """
-    Performs Gauss-Seidel iteration for the y-momentum equation and MUTATES v
+    Recovers coefficients of the y-velocity field
     Arguments:
     - u: x-velocity field
     - v: y-velocity field
-    - P: pressure field
     - dx: grid spacing in x direction
     - dy: grid spacing in y direction
     - Re: Reynolds number
+    Returns:
+    - av_ij: coefficient of v[i, j]
+    - av_ip1j: coefficient of v[i+1, j]
+    - av_im1j: coefficient of v[i-1, j]
+    - av_ijp1: coefficient of v[i, j+1]
+    - av_ijm1: coefficient of v[i, j-1]
     """
     av_ij = zeros(Nx + 2, Ny + 2)
     av_ip1j = zeros(Nx + 2, Ny + 2)
@@ -114,6 +118,23 @@ function y_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
             av_ij[i, j] += -0.25 * dy * (u[i-1, j] + u[i-1, j+1])
         end
     end
+    return av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1
+end
+
+
+function y_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
+    """
+    Performs Gauss-Seidel iteration for the y-momentum equation and MUTATES v
+    Arguments:
+    - u: x-velocity field
+    - v: y-velocity field
+    - P: pressure field
+    - dx: grid spacing in x direction
+    - dy: grid spacing in y direction
+    - Re: Reynolds number
+    """
+
+    av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = v_coefficients(u, v, dx, dy, Re, Nx, Ny)
 
     for k in 1:100
         for j in 2:Ny+1
@@ -130,6 +151,47 @@ function y_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
 end
 
 
+function u_coefficients(u, v, dx, dy, Re, Nx, Ny)
+    """
+    Recovers coefficients of the x-velocity field
+    Arguments:
+    - u: x-velocity field
+    - v: y-velocity field
+    - dx: grid spacing in x direction
+    - dy: grid spacing in y direction
+    - Re: Reynolds number
+    - Nx: number of grid points in x direction
+    - Ny: number of grid points in y direction
+    Returns:
+    - au_ij: coefficient of u[i, j]
+    - au_ip1j: coefficient of u[i+1, j]
+    - au_im1j: coefficient of u[i-1, j]
+    - au_ijp1: coefficient of u[i, j+1]
+    - au_ijm1: coefficient of u[i, j-1]
+    """
+    au_ij = zeros(Nx + 2, Ny + 2)
+    au_ip1j = zeros(Nx + 2, Ny + 2)
+    au_im1j = zeros(Nx + 2, Ny + 2)
+    au_ijp1 = zeros(Nx + 2, Ny + 2)
+    au_ijm1 = zeros(Nx + 2, Ny + 2)
+
+    for j in 2:Ny+1
+        for i in 2:Nx+1
+            au_ip1j[i, j] = +0.25 * dy * (u[i, j] + u[i+1, j]) - dy / (dx * Re)
+            au_im1j[i, j] = -0.25 * dy * (u[i, j] + u[i-1, j]) - dy / (dx * Re)
+            au_ijp1[i, j] = +0.25 * dx * (v[i, j] + v[i+1, j]) - dx / (dy * Re)
+            au_ijm1[i, j] = -0.25 * dx * (v[i, j-1] + v[i+1, j-1]) - dx / (dy * Re)
+
+            au_ij[i, j] += +0.25 * dy * (u[i, j] + u[i+1, j]) + dy / (dx * Re)
+            au_ij[i, j] += -0.25 * dy * (u[i, j] + u[i-1, j]) + dy / (dx * Re)
+            au_ij[i, j] += +0.25 * dx * (v[i, j] + v[i+1, j]) + dx / (dy * Re)
+            au_ij[i, j] += -0.25 * dx * (v[i, j-1] + v[i+1, j-1]) + dx / (dy * Re)
+        end
+    end
+    return au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1
+end
+
+
 function x_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
     """
     Performs Gauss-Seidel iteration for the x-momentum equation and MUTATES u
@@ -141,11 +203,8 @@ function x_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
     - dy: grid spacing in y direction
     - Re: Reynolds number
     """
-    au_ij = zeros(Nx + 2, Ny + 2)
-    au_ip1j = zeros(Nx + 2, Ny + 2)
-    au_im1j = zeros(Nx + 2, Ny + 2)
-    au_ijp1 = zeros(Nx + 2, Ny + 2)
-    au_ijm1 = zeros(Nx + 2, Ny + 2)
+
+    au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = u_coefficients(u, v, dx, dy, Re, Nx, Ny)
 
     for j in 2:Ny+1
         for i in 2:Nx+1
@@ -172,4 +231,7 @@ function x_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
             end
         end
     end
+end
+
+function pressure_correction(u, v, P, dx, dy, Re, Nx, Ny)
 end
