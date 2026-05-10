@@ -128,7 +128,7 @@ function y_momentum_GS!(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_i
     # av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = v_coefficients(u, v, dx, dy, Re, Nx, Ny)
 
     for k in 1:100
-        for j in 2:Ny+1
+        for j in 2:Ny
             for i in 2:Nx+1
                 v[i, j] = (dx * (P[i, j] - P[i, j+1]) - av_ip1j[i, j] * v[i+1, j]
                            -
@@ -137,6 +137,9 @@ function y_momentum_GS!(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_i
                            av_ijm1[i, j] * v[i, j-1]) / av_ij[i, j]
             end
         end
+        v[:, 0] = 0
+        v[:, end-1] = 0 # because of forward staggering
+        v[:, end] = 0
     end
 
 end
@@ -199,6 +202,13 @@ function x_momentum_GS!(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_i
                            au_ijm1[i, j] * u[i, j-1]) / au_ij[i, j]
             end
         end
+        # Inlet
+        u[0, :] = U_ref
+        # Oulet
+        u[end, :] = u[end-1, :]
+        # No-slip
+        u[:, 0] = -u[:, 1]
+        u[:, end] = -u[:, end-1]
     end
 end
 
