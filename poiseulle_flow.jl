@@ -54,7 +54,6 @@ begin
     display(p)
 end
 
-
 function apply_BC!(u, v, P, U_ref, P_ref)
     """
     Applies relevant boundary conditions to the variables
@@ -116,25 +115,17 @@ function v_coefficients(u, v, dx, dy, Re, Nx, Ny)
             av_ij[i, j] += 0.25 * dx * (v[i, j+1] + v[i, j])
             av_ij[i, j] += dx / (dy * Re)
             av_ij[i, j] += -0.25 * dy * (u[i-1, j] + u[i-1, j+1])
+            av_ij[i, j] += dy / (dx * Re)
         end
     end
     return av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1
 end
 
-
-function y_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
+function y_momentum_GS!(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1)
     """
     Performs Gauss-Seidel iteration for the y-momentum equation and MUTATES v
-    Arguments:
-    - u: x-velocity field
-    - v: y-velocity field
-    - P: pressure field
-    - dx: grid spacing in x direction
-    - dy: grid spacing in y direction
-    - Re: Reynolds number
     """
-
-    av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = v_coefficients(u, v, dx, dy, Re, Nx, Ny)
+    # av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = v_coefficients(u, v, dx, dy, Re, Nx, Ny)
 
     for k in 1:100
         for j in 2:Ny+1
@@ -149,7 +140,6 @@ function y_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
     end
 
 end
-
 
 function u_coefficients(u, v, dx, dy, Re, Nx, Ny)
     """
@@ -191,34 +181,13 @@ function u_coefficients(u, v, dx, dy, Re, Nx, Ny)
     return au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1
 end
 
-
-function x_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
+function x_momentum_GS!(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1)
     """
     Performs Gauss-Seidel iteration for the x-momentum equation and MUTATES u
-    Arguments:
-    - u: x-velocity field
-    - v: y-velocity field
-    - P: pressure field
-    - dx: grid spacing in x direction
-    - dy: grid spacing in y direction
-    - Re: Reynolds number
+
     """
 
-    au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = u_coefficients(u, v, dx, dy, Re, Nx, Ny)
-
-    for j in 2:Ny+1
-        for i in 2:Nx+1
-            au_ip1j[i, j] = +0.25 * dy * (u[i, j] + u[i+1, j]) - dy / (dx * Re)
-            au_im1j[i, j] = -0.25 * dy * (u[i, j] + u[i-1, j]) - dy / (dx * Re)
-            au_ijp1[i, j] = +0.25 * dx * (v[i, j] + v[i+1, j]) - dx / (dy * Re)
-            au_ijm1[i, j] = -0.25 * dx * (v[i, j-1] + v[i+1, j-1]) - dx / (dy * Re)
-
-            au_ij[i, j] += +0.25 * dy * (u[i, j] + u[i+1, j]) + dy / (dx * Re)
-            au_ij[i, j] += -0.25 * dy * (u[i, j] + u[i-1, j]) + dy / (dx * Re)
-            au_ij[i, j] += +0.25 * dx * (v[i, j] + v[i+1, j]) + dx / (dy * Re)
-            au_ij[i, j] += -0.25 * dx * (v[i, j-1] + v[i+1, j-1]) + dx / (dy * Re)
-        end
-    end
+    # au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = u_coefficients(u, v, dx, dy, Re, Nx, Ny)
 
     for k in 1:100
         for j in 2:Ny+1
@@ -233,5 +202,31 @@ function x_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
     end
 end
 
-function pressure_correction(u, v, P, dx, dy, Re, Nx, Ny)
+function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij)
+    """
+    Solves the pressure correction equation and returns the pressure correction field
+    """
+
+    # au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = u_coefficients(u, v, dx, dy, Re, Nx, Ny)
+    # av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = v_coefficients(u, v, dx, dy, Re, Nx, Ny)
+    p_prime = zeros(Nx + 2, Ny + 2)
+    scale = norm(P)
+
+    for k in 1:10000
+        for j in 2:Ny+1
+            for i in 2:Nx+1
+                a_e = dy^2 / auij[i, j]
+                a_w = dy^2 / auij[i-1, j]
+                a_n = dx^2 / avij[i, j]
+                a_s = dx^2 / avij[i, j-1]
+                a_p = a_e + a_w + a_n + a_s
+                b = dy * (u[i-1, j] - u[i, j]) + dx * (v[i, j-1] - v[i, j])
+                p_prime[i, j] = (a_e * p_prime[i+1, j] + a_w * p_prime[i-1, j] + a_n * p_prime[i, j+1] + a_s * p_prime[i, j-1] + b) / a_p
+            end
+        end
+        if norm(p_prime) / scale < 1e-3
+            return p_prime
+        end
+    end
+    return p_prime
 end
