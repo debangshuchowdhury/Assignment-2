@@ -59,23 +59,23 @@ function apply_BC!(u, v, P, U_ref, P_ref)
     Applies relevant boundary conditions to the variables
     """
     # Inlet
-    u[0, :] = U_ref
-    P[0, :] = P_ref
+    u[1, :] = U_ref
+    P[1, :] = P_ref
 
     # Oulet
     u[end, :] = u[end-1, :]
 
 
     # No-slip
-    u[:, 0] = -u[:, 1]
+    u[:, 1] = -u[:, 2]
     u[:, end] = -u[:, end-1]
 
     # No penetration
-    v[:, 0] = 0
+    v[:, 1] = 0
     v[:, end-1] = 0 # because of forward staggering
     v[:, end] = 0
     P[:, end] = P[:, end-1]
-    P[:, 0] = P[:, 1]
+    P[:, 1] = P[:, 2]
 end
 
 
@@ -137,7 +137,7 @@ function y_momentum_GS!(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_i
                            av_ijm1[i, j] * v[i, j-1]) / av_ij[i, j]
             end
         end
-        v[:, 0] = 0
+        v[:, 1] = 0
         v[:, end-1] = 0 # because of forward staggering
         v[:, end] = 0
     end
@@ -234,7 +234,8 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij)
                 p_prime[i, j] = (a_e * p_prime[i+1, j] + a_w * p_prime[i-1, j] + a_n * p_prime[i, j+1] + a_s * p_prime[i, j-1] + b) / a_p
             end
         end
-        if norm(p_prime) / scale < 1e-3
+        p_prime[1, :] = -p_prime[2, :]
+        if norm(p_prime) / scale < 1e-6
             return p_prime
         end
     end
