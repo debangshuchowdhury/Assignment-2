@@ -80,17 +80,18 @@ function apply_BC!(u, v, P, U_ref, P_ref)
 end
 
 
-"""
-   Performs Gauss-Seidel iteration for the y-momentum equation and MUTATES v
-   Arguments:
-   - u: x-velocity field
-   - v: y-velocity field
-   - P: pressure field
-   - dx: grid spacing in x direction
-   - dy: grid spacing in y direction
-   - Re: Reynolds number
-   """
+
 function y_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
+    """
+    Performs Gauss-Seidel iteration for the y-momentum equation and MUTATES v
+    Arguments:
+    - u: x-velocity field
+    - v: y-velocity field
+    - P: pressure field
+    - dx: grid spacing in x direction
+    - dy: grid spacing in y direction
+    - Re: Reynolds number
+    """
     av_ij = zeros(Nx + 2, Ny + 2)
     av_ip1j = zeros(Nx + 2, Ny + 2)
     av_im1j = zeros(Nx + 2, Ny + 2)
@@ -126,4 +127,49 @@ function y_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
         end
     end
 
+end
+
+
+function x_momentum_GS!(u, v, P, dx, dy, Re, Nx, Ny)
+    """
+    Performs Gauss-Seidel iteration for the x-momentum equation and MUTATES u
+    Arguments:
+    - u: x-velocity field
+    - v: y-velocity field
+    - P: pressure field
+    - dx: grid spacing in x direction
+    - dy: grid spacing in y direction
+    - Re: Reynolds number
+    """
+    au_ij = zeros(Nx + 2, Ny + 2)
+    au_ip1j = zeros(Nx + 2, Ny + 2)
+    au_im1j = zeros(Nx + 2, Ny + 2)
+    au_ijp1 = zeros(Nx + 2, Ny + 2)
+    au_ijm1 = zeros(Nx + 2, Ny + 2)
+
+    for j in 2:Ny+1
+        for i in 2:Nx+1
+            au_ip1j[i, j] = +0.25 * dy * (u[i, j] + u[i+1, j]) - dy / (dx * Re)
+            au_im1j[i, j] = -0.25 * dy * (u[i, j] + u[i-1, j]) - dy / (dx * Re)
+            au_ijp1[i, j] = +0.25 * dx * (v[i, j] + v[i+1, j]) - dx / (dy * Re)
+            au_ijm1[i, j] = -0.25 * dx * (v[i, j-1] + v[i+1, j-1]) - dx / (dy * Re)
+
+            au_ij[i, j] += +0.25 * dy * (u[i, j] + u[i+1, j]) + dy / (dx * Re)
+            au_ij[i, j] += -0.25 * dy * (u[i, j] + u[i-1, j]) + dy / (dx * Re)
+            au_ij[i, j] += +0.25 * dx * (v[i, j] + v[i+1, j]) + dx / (dy * Re)
+            au_ij[i, j] += -0.25 * dx * (v[i, j-1] + v[i+1, j-1]) + dx / (dy * Re)
+        end
+    end
+
+    for k in 1:100
+        for j in 2:Ny+1
+            for i in 2:Nx+1
+                u[i, j] = (dy * (P[i, j] - P[i+1, j]) - au_ip1j[i, j] * u[i+1, j]
+                           -
+                           au_im1j[i, j] * u[i-1, j] - au_ijp1[i, j] * u[i, j+1]
+                           -
+                           au_ijm1[i, j] * u[i, j-1]) / au_ij[i, j]
+            end
+        end
+    end
 end
