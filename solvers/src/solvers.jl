@@ -1,5 +1,5 @@
 module solvers
-export poisson_solver
+# export poisson_solver
 
 using LinearAlgebra
 
@@ -84,8 +84,9 @@ function y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_i
         end
         V[:, 1] .= 0
         V[:, end-1] .= 0 # because of forward staggering
-        V[:, end] .= 0
-        v[1, :] = -v[2, :]
+        # V[:, end] .= 0
+        v[1, :] = v[2, :]
+        v[end, :] = v[end-1, :]
     end
     return V
 end
@@ -187,7 +188,7 @@ function x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_i
         # Inlet
         U[1, :] = u_in
         # Oulet
-        U[end, :] = U[end-1, :]
+        U[end, :] = u_in    #U[end-1, :]
         # No-slip
         U[:, 1] = -U[:, 2]
         U[:, end] = -U[:, end-1]
@@ -203,14 +204,14 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5)
     p_prime = zeros(Float64, Nx + 2, Ny + 2)
     scale = norm(P)
 
-    for k in 1:1000
+    for k in 1:10000
         for j in 3:Ny+1
             for i in 3:Nx+1
                 a_e = -dy^2 / auij[i, j]
                 a_w = -dy^2 / auij[i-1, j]
                 a_n = -dx^2 / avij[i, j]
                 a_s = -dx^2 / avij[i, j-1]
-                a_p = a_e + a_w + a_n + a_s
+                a_p = -(a_e + a_w + a_n + a_s)
                 b = dy * (u[i-1, j] - u[i, j]) + dx * (v[i, j-1] - v[i, j])
                 test = (a_e * p_prime[i+1, j] + a_w * p_prime[i-1, j] + a_n * p_prime[i, j+1] + a_s * p_prime[i, j-1] + b) / a_p
                 p_prime[i, j] = (1 - omega) * p_prime[i, j] + omega * test
@@ -224,8 +225,8 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5)
                 end
             end
         end
-        p_prime[1, :] = -p_prime[2, :]
-        if norm(p_prime) / scale < 1e-6
+        p_prime[1, :] .= 0
+        if norm(p_prime) / scale < 1e-10
             return p_prime
         end
     end
