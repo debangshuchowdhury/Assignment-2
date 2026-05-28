@@ -162,12 +162,13 @@ function x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_i
     return U
 end
 
-function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5)
+function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5, p_prime=nothing)
     """
     Solves the pressure correction equation and returns the pressure correction field
     """
-
-    p_prime = zeros(Float64, Nx + 2, Ny + 2)
+    if isnothing(p_prime)
+        p_prime = zeros(Float64, Nx + 2, Ny + 2)
+    end
     # scale = norm(P)
 
     for k in 1:10000

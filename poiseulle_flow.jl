@@ -63,6 +63,7 @@ function apply_BC!(u, v, P, P_ref, u_in, P_out, grad, dx)
     # Inlet
     u[1, :] = u_in #(Re * PGrad) .* (0.5 .* y) .* (1 .- y)
     u[2, :] = u[1, :]
+    v[1, :] .= 0
     # P[1, :] .= P_ref
     P[2, :] = P[3, :] .- grad * dx
     P[1, :] = P[2, :] .- grad * dx
@@ -76,6 +77,7 @@ function apply_BC!(u, v, P, P_ref, u_in, P_out, grad, dx)
     # u[end-1, :] = u[end-2, :]
     # u[end, :] = u[end-1, :]
     P[end, :] .= 0
+    v[end, :] .= 0
 
 
 
@@ -87,8 +89,9 @@ function apply_BC!(u, v, P, P_ref, u_in, P_out, grad, dx)
     v[:, 1] .= 0
     v[:, end-1] .= 0 # because of forward staggering
     v[:, end] .= 0
-    # P[:, end] = P[:, end-1]
-    # P[:, 1] = P[:, 2]
+    P[:, end] = P[:, end-1]
+    P[:, 2] = P[:, 3]
+    P[:, 1] = P[:, 2]
 end
 
 
@@ -100,13 +103,13 @@ end
 
 # Computational loop
 begin
-    alpha_p = 0.05
-    alpha_u = 0.1
+    alpha_p = 0.5
+    alpha_u = 1
     alpha_v = 0.001
     Re = 10
     PGrad = -0.1
     u = ones(Nx + 2, Ny + 2)
-    v = zeros(Nx + 2, Ny + 2)
+    v = ones(Nx + 2, Ny + 2)
     P = zeros(Nx + 2, Ny + 2)
     # for i in range(Nx + 1, 1, step=-1)
     #     P[i, :] = P[i+1, :] .- PGrad * dx
@@ -144,16 +147,17 @@ begin
     println("MIN P = $(minimum(P))")
     println("MAX P = $(maximum(P))")
     # sleep(5)
+    # p_prime = zeros(Nx + 2, Ny + 2)
 
     for k in 1:10000
         av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
         au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        # vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, 0.001)
-        vstar = zeros(Nx + 2, Ny + 2)
-        ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet, 0.1)
+        vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, alpha_v)
+        # vstar = zeros(Nx + 2, Ny + 2)
+        ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet, alpha_u)
         # ustar = deepcopy(u)
         # solvers.x_momentum_upwind!(ustar, v, P, dx, dy, Nx, Ny, Re, U_inlet)
-        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, 0.05)
+        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, 1.5)
 
         P += alpha_p * p_prime
 
@@ -167,22 +171,22 @@ begin
         for j in 2:Ny+1
             for i in 2:Nx+1
                 uc[i, j] = (dy / au_ij[i, j]) * (p_prime[i, j] - p_prime[i+1, j])
-                # vc[i, j] = (dx / av_ij[i, j]) * (p_prime[i, j] - p_prime[i, j+1])
+                vc[i, j] = (dx / av_ij[i, j]) * (p_prime[i, j] - p_prime[i, j+1])
             end
         end
 
         # nancheck(uc, k)
         # nancheck(vc, k)
 
-        u = ustar + alpha_u * uc
-        v = vstar + alpha_v * vc
+        u = ustar + uc
+        v = vstar + vc
 
         apply_BC!(u, v, P, P_ref, U_inlet, P_outlet, PGrad, dx)
 
         error = norm(uc) / norm(u)
 
         # clim = maximum(abs, P)
-        if k % 1 == 0
+        if k % 10 == 0
             println("Iteration $k: Error=$error")
             println(", pprime max = ", maximum(abs.(p_prime)))
             println("ustar max = $(maximum(abs.(ustar)))")
@@ -206,7 +210,7 @@ begin
             print("iteration $k: max P = $(maximum(P))")
             throw(ErrorException("P is diverging."))
         end
-        if error <= 1e-4
+        if error <= 1e-8
             print("Converged in $k iterations. error = $error")
 
             break
@@ -233,7 +237,7 @@ begin
     end
 end
 
-contourf(x, y, u',
+contourf(x, y, v',
     xlabel="x",
     ylabel="y",
     # title="x velocity (Iteration $k)",
