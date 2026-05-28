@@ -61,15 +61,20 @@ function apply_BC!(u, v, P, P_ref, u_in, P_out, grad, dx)
     Applies relevant boundary conditions to the variables
     """
     # Inlet
-    # u[1, :] = u_in #(Re * PGrad) .* (0.5 .* y) .* (1 .- y)
+    u[1, :] = u_in #(Re * PGrad) .* (0.5 .* y) .* (1 .- y)
+    u[2, :] = u[1, :]
     # P[1, :] .= P_ref
+    P[2, :] = P[3, :] .- grad * dx
     P[1, :] = P[2, :] .- grad * dx
-    u[1, :] = u[2, :]
+    # u[2, :] = u[3, :]
+    # u[1, :] = u[2, :]
 
     # Oulet
     # u[end, :] = u[end-1, :]
-    # u[end, :] = u_in
-    u[end, :] = u[end-1, :]
+    u[end, :] = u_in
+    u[end-1, :] = u[end, :]
+    # u[end-1, :] = u[end-2, :]
+    # u[end, :] = u[end-1, :]
     P[end, :] .= 0
 
 
@@ -95,8 +100,9 @@ end
 
 # Computational loop
 begin
-    alpha = 1
-    Re = 1
+    alpha_p = 0.05
+    alpha_u = 0.1
+    Re = 100
     PGrad = -0.1
     u = ones(Nx + 2, Ny + 2)
     v = zeros(Nx + 2, Ny + 2)
@@ -138,17 +144,17 @@ begin
     println("MAX P = $(maximum(P))")
     # sleep(5)
 
-    for k in 1:100000
+    for k in 1:10000
         av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
         au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
         # vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1)
         vstar = zeros(Nx + 2, Ny + 2)
-        ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet, 1)
+        ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet, 0.1)
         # ustar = deepcopy(u)
         # solvers.x_momentum_upwind!(ustar, v, P, dx, dy, Nx, Ny, Re, U_inlet)
-        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, 1)
+        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, 0.05)
 
-        P += alpha * p_prime
+        P += alpha_p * p_prime
 
         nancheck(ustar, k)
         nancheck(vstar, k)
@@ -167,7 +173,7 @@ begin
         # nancheck(uc, k)
         # nancheck(vc, k)
 
-        u = ustar + alpha * uc
+        u = ustar + alpha_u * uc
         # v = vstar + alpha * vc
 
         apply_BC!(u, v, P, P_ref, U_inlet, P_outlet, PGrad, dx)
@@ -207,8 +213,8 @@ begin
 end
 
 begin
-    tttt = plot(range(1, Nx + 2), u[:, 6])
-    plot!(ylims=[0.0122, 0.0130])
+    tttt = plot(range(1, Nx + 2), P[:, 6])
+    # plot!(ylims=[0.0122, 0.0130])
     # plot!(U_inlet, range(1, Ny + 2), linestyle=:dashdot)
     display(tttt)
 end

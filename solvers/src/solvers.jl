@@ -115,7 +115,7 @@ end
 
 function x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, u_in, omega=1)
     U = deepcopy(u)
-    for k in 1:20000
+    for k in 1:2000
         res = 0
         for j in 2:Ny+1
             for i in 2:Nx+1
@@ -133,20 +133,23 @@ function x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_i
                 end
             end
         end
-        # Inlet
-        U[1, :] = u_in
-        # U[1, :] = U[2, :]
-        # Oulet
-        U[end-1, :] = u_in    #U[end-1, :]
-        U[end, :] = U[end-1, :]
-        U[end-2, :] = U[end-1, :]
+        # # Inlet
+        # U[1, :] = u_in
+        # # U[2, :] = U[3, :]
+        # # U[1, :] = U[2, :]
 
-        # No-slip
-        U[:, 1] = -U[:, 2]
-        U[:, end] = -U[:, end-1]
+        # # Oulet
+        # # U[end-1, :] = u_in    #U[end-1, :]
+        # # U[end-1, :] = U[end-2, :]
+        # U[end, :] = U[end-1, :]
+        # # U[end-2, :] = U[end-1, :]
 
-        if res <= 1e-10
-            println("xmom gs completed in $k iterations")
+        # # No-slip
+        # U[:, 1] = -U[:, 2]
+        # U[:, end] = -U[:, end-1]
+
+        if res <= 1e-6
+            # println("xmom gs completed in $k iterations")
             return U
         end
 
@@ -165,8 +168,8 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5)
 
     for k in 1:10000
         res = 0
-        for j in 3:Ny+1
-            for i in 3:Nx+1
+        for j in 3:Ny
+            for i in 3:Nx
                 a_e = dy^2 / auij[i, j]
                 a_w = dy^2 / auij[i-1, j]
                 a_n = dx^2 / avij[i, j]
@@ -189,9 +192,9 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5)
         end
         # p_prime[1, :] .= 0
         # p_prime[2, :] .= 0
-        p_prime[end-1, :] .= 0
-        p_prime[end, :] .= 0
-        if res < 1e-4
+        # p_prime[end-1, :] .= 0
+        # p_prime[end, :] .= 0
+        if res < 1e-6
             # println("breakout")
             return p_prime
         end
