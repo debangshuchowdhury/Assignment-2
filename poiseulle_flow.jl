@@ -61,9 +61,10 @@ function apply_BC!(u, v, P, P_ref, u_in, P_out, grad, dx)
     Applies relevant boundary conditions to the variables
     """
     # Inlet
-    u[1, :] = u_in #(Re * PGrad) .* (0.5 .* y) .* (1 .- y)
+    # u[1, :] = u_in #(Re * PGrad) .* (0.5 .* y) .* (1 .- y)
     # P[1, :] .= P_ref
-    P[1, :] = P[2, :] .+ grad * dx
+    P[1, :] = P[2, :] .- grad * dx
+    u[1, :] = u[2, :]
 
     # Oulet
     # u[end, :] = u[end-1, :]
@@ -94,17 +95,17 @@ end
 
 # Computational loop
 begin
-    alpha = 0.1
+    alpha = 1
     Re = 1
-    PGrad = 0.1
-    u = zeros(Nx + 2, Ny + 2)
+    PGrad = -0.1
+    u = ones(Nx + 2, Ny + 2)
     v = zeros(Nx + 2, Ny + 2)
     P = zeros(Nx + 2, Ny + 2)
     # for i in range(Nx + 1, 1, step=-1)
-    #     P[i, :] = P[i+1, :] .+ PGrad * dx
+    #     P[i, :] = P[i+1, :] .- PGrad * dx
     # end
-    Uref = 1.0
-    U_inlet = (Re * PGrad) .* (0.5 .* y) .* (1 .- y)
+    # Uref = 1.0
+    U_inlet = (Re * -PGrad) .* (0.5 .* y) .* (1 .- y)
     U_inlet[1] = -U_inlet[2]
     U_inlet[end] = -U_inlet[end-1]
     # for l in 1:Nx+2
@@ -137,21 +138,21 @@ begin
     println("MAX P = $(maximum(P))")
     # sleep(5)
 
-    for k in 1:1000
+    for k in 1:100000
         av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
         au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
         # vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1)
         vstar = zeros(Nx + 2, Ny + 2)
-        ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet)
+        ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet, 1)
         # ustar = deepcopy(u)
         # solvers.x_momentum_upwind!(ustar, v, P, dx, dy, Nx, Ny, Re, U_inlet)
-        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, 0.05)
+        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, 1)
 
         P += alpha * p_prime
 
         nancheck(ustar, k)
         nancheck(vstar, k)
-        # nancheck(p_prime, k)
+        nancheck(p_prime, k)
         nancheck(P, k)
 
         uc = zeros(Nx + 2, Ny + 2)
@@ -171,21 +172,14 @@ begin
 
         apply_BC!(u, v, P, P_ref, U_inlet, P_outlet, PGrad, dx)
 
-        # error = maximum(abs.(uc)) / Uref
-        # if error <= 1e-10
-        #     print("Converged in $k iterations. error = $error")
-
-        #     break
-        # end
-
-
-        # println("Iteration $k: Error=$error")
-        # println(", pprime max = ", maximum(abs.(p_prime)))
-        # println("ustar max = $(maximum(abs.(ustar)))")
-        # println("--------------------------------\n")
+        error = norm(uc) / norm(u)
 
         # clim = maximum(abs, P)
-        if k % 100 == 0
+        if k % 10 == 0
+            println("Iteration $k: Error=$error")
+            println(", pprime max = ", maximum(abs.(p_prime)))
+            println("ustar max = $(maximum(abs.(ustar)))")
+            println("--------------------------------\n")
             lal = contourf(x, y, u',
                 xlabel="x",
                 ylabel="y",
@@ -200,33 +194,44 @@ begin
             # sleep(1)
         end
 
-        if maximum(P) > 5
-            print("iteration $k")
+        if maximum(P) > 100
+            print("iteration $k: max P = $(maximum(P))")
             throw(ErrorException("P is diverging."))
         end
-        # if k == 1
-        #     println("u max = $(maximum(u))")
-        #     tttt = plot(u[20, :], range(1, Ny + 2))
-        #     display(tttt)
-        #     throw(ErrorException("the line ends here"))
-        # end
+        if error <= 1e-4
+            print("Converged in $k iterations. error = $error")
+
+            break
+        end
     end
 end
 
 begin
-    tttt = plot(u[20, :], range(1, Ny + 2))
-    plot!(U_inlet, range(1, Ny + 2), linestyle=:dashdot)
+    tttt = plot(range(1, Nx + 2), u[:, 6])
+    plot!(ylims=[0.0122, 0.0130])
+    # plot!(U_inlet, range(1, Ny + 2), linestyle=:dashdot)
     display(tttt)
 end
 
 begin
-    contourf(x, y, u',
-        xlabel="x",
-        ylabel="y",
-        title="vel",
-        color=:viridis,
-        levels=20,          # number of contour levels; adjust as needed
-        linewidth=0,
-        aspect_ratio=1)
+    asdf = plot(U_inlet, range(1, Ny + 2), label="real", color=:black)
+    for i in range(1, Nx + 2)
+        plot!(u[i, :], range(1, Ny + 2), label="$i")
+        display(asdf)
+        sleep(0.05)
+        # if i > 5
+        #     break
+        # end
+    end
 end
 
+contourf(x, y, u',
+    xlabel="x",
+    ylabel="y",
+    # title="x velocity (Iteration $k)",
+    color=:viridis,
+    levels=20,          # number of contour levels; adjust as needed
+    linewidth=0,
+    aspect_ratio=1,
+    # clims=(-clim, clim)
+)

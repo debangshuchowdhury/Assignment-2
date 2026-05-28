@@ -115,7 +115,7 @@ end
 
 function x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, u_in, omega=1)
     U = deepcopy(u)
-    for k in 1:10000
+    for k in 1:20000
         res = 0
         for j in 2:Ny+1
             for i in 2:Nx+1
@@ -125,23 +125,22 @@ function x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_i
                         -
                         au_ijm1[i, j] * U[i, j-1]) / au_ij[i, j]
                 pred = (1 - omega) * U[i, j] + omega * test
-                res += (U[i, j] - pred)^2
+                res = maximum([abs((U[i, j] - pred))^2, res])
                 U[i, j] = pred
                 if isnan(test)
                     println("i=$i, j=$j")
                     throw(ErrorException("nan in u here"))
                 end
-                if U[i, j] > 10
-                    throw(ErrorException("predicted vel above 10, uij = $(U[i,j]), test = $test"))
-                end
             end
         end
         # Inlet
         U[1, :] = u_in
-        # U[2, :] = U[1, :]
+        # U[1, :] = U[2, :]
         # Oulet
-        # U[end-1, :] = u_in    #U[end-1, :]
+        U[end-1, :] = u_in    #U[end-1, :]
         U[end, :] = U[end-1, :]
+        U[end-2, :] = U[end-1, :]
+
         # No-slip
         U[:, 1] = -U[:, 2]
         U[:, end] = -U[:, end-1]
@@ -165,6 +164,7 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5)
     # scale = norm(P)
 
     for k in 1:10000
+        res = 0
         for j in 3:Ny+1
             for i in 3:Nx+1
                 a_e = dy^2 / auij[i, j]
@@ -182,19 +182,21 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5)
                     println("p_prime[i+1, j]=$(p_prime[i+1, j]), p_prime[i-1, j]=$(p_prime[i-1, j]), p_prime[i, j+1]=$(p_prime[i, j+1]), p_prime[i, j-1]=$(p_prime[i, j-1])")
                     throw(ErrorException("NaN in pressure correction"))
                 end
-                p_prime[i, j] = (1 - omega) * p_prime[i, j] + omega * test
+                new = (1 - omega) * p_prime[i, j] + omega * test
+                res += (p_prime[i, j] - res)^2
+                p_prime[i, j] = new
             end
         end
         # p_prime[1, :] .= 0
         # p_prime[2, :] .= 0
         p_prime[end-1, :] .= 0
         p_prime[end, :] .= 0
-        if norm(p_prime) <= 1e-6
+        if res < 1e-4
             # println("breakout")
             return p_prime
         end
     end
-    println("pressure correction did not converge (err = $(norm(p_prime))")
+    # println("pressure correction did not converge (err = $(norm(p_prime))")
     return p_prime
 end
 
