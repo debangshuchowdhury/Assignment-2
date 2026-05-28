@@ -25,7 +25,7 @@ using solvers
 begin
     Ly = 1.0
     Lx = 4.0
-    Ny = 5
+    Ny = 10
     Nx = convert(Int32, Ny * (Lx / Ly))
     dx = Lx / Nx
     dy = Ly / Ny
@@ -56,17 +56,20 @@ end
 #     display(p)
 # end
 
-function apply_BC!(u, v, P, P_ref, u_in)
+function apply_BC!(u, v, P, P_ref, u_in, P_out, grad, dx)
     """
     Applies relevant boundary conditions to the variables
     """
     # Inlet
     u[1, :] = u_in #(Re * PGrad) .* (0.5 .* y) .* (1 .- y)
-    P[1, :] .= P_ref
+    # P[1, :] .= P_ref
+    P[1, :] = P[2, :] .+ grad * dx
 
     # Oulet
     # u[end, :] = u[end-1, :]
-    u[end, :] = u_in
+    # u[end, :] = u_in
+    u[end, :] = u[end-1, :]
+    P[end, :] .= 0
 
 
 
@@ -83,7 +86,6 @@ function apply_BC!(u, v, P, P_ref, u_in)
 end
 
 
-
 function nancheck(a, k)
     if any(isnan, a)
         throw(ErrorException("NaN in this array. (Iteration $k)"))
@@ -92,24 +94,36 @@ end
 
 # Computational loop
 begin
-    alpha = 1
+    alpha = 0.1
     Re = 1
     PGrad = 0.1
-    u = ones(Nx + 2, Ny + 2)
+    u = zeros(Nx + 2, Ny + 2)
     v = zeros(Nx + 2, Ny + 2)
     P = zeros(Nx + 2, Ny + 2)
+    # for i in range(Nx + 1, 1, step=-1)
+    #     P[i, :] = P[i+1, :] .+ PGrad * dx
+    # end
     Uref = 1.0
     U_inlet = (Re * PGrad) .* (0.5 .* y) .* (1 .- y)
+    U_inlet[1] = -U_inlet[2]
+    U_inlet[end] = -U_inlet[end-1]
+    # for l in 1:Nx+2
+    #     u[l, :] = U_inlet
+    # end
     P_ref = 1.0
+    P_outlet = 0 #P_ref - PGrad * (Lx)
+    ttt = plot(range(1, Nx + 2), P[:, 3])
+    display(ttt)
+    println("P outlet = $P_outlet")
     # apply_BC!(u, v, P, Uref, P_ref)
-    apply_BC!(u, v, P, P_ref, U_inlet)
+    apply_BC!(u, v, P, P_ref, U_inlet, P_outlet, PGrad, dx)
     println("u max = $(maximum(abs.(u)))")
 
     # clim = maximum(abs, P)
-    hmm = contourf(x, y, P',
+    hmm = contourf(x, y, u',
         xlabel="x",
         ylabel="y",
-        title="Pressure (initial condition)",
+        title="x vel (initial condition)",
         color=:viridis,
         levels=20,          # number of contour levels; adjust as needed
         linewidth=0,
@@ -117,85 +131,102 @@ begin
         # clims=(-clim, clim)
     )
     display(hmm)
+    # clf!()
+    println("numx = $(Nx+2), numy = $(Ny+2)")
+    println("MIN P = $(minimum(P))")
+    println("MAX P = $(maximum(P))")
     # sleep(5)
 
-    for k in 1:10000
+    for k in 1:1000
         av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
         au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        # y_momentum_GS!(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1)
-        # x_momentum_GS!(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, Uref)
-        # p_prime = pressure_correction(u, v, P, dx, dy, Nx, Ny, au_ij, av_ij)
-        vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1)
+        # vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1)
+        vstar = zeros(Nx + 2, Ny + 2)
         ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet)
-        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij)
+        # ustar = deepcopy(u)
+        # solvers.x_momentum_upwind!(ustar, v, P, dx, dy, Nx, Ny, Re, U_inlet)
+        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, 0.05)
 
         P += alpha * p_prime
 
         nancheck(ustar, k)
         nancheck(vstar, k)
-        nancheck(p_prime, k)
+        # nancheck(p_prime, k)
         nancheck(P, k)
 
         uc = zeros(Nx + 2, Ny + 2)
-        vc = zeros(Nx + 2, Ny + 2)
+        # vc = zeros(Nx + 2, Ny + 2)
         for j in 2:Ny+1
             for i in 2:Nx+1
                 uc[i, j] = (dy / au_ij[i, j]) * (p_prime[i, j] - p_prime[i+1, j])
-                vc[i, j] = (dx / av_ij[i, j]) * (p_prime[i, j] - p_prime[i, j+1])
+                # vc[i, j] = (dx / av_ij[i, j]) * (p_prime[i, j] - p_prime[i, j+1])
             end
         end
 
-        nancheck(uc, k)
-        nancheck(vc, k)
+        # nancheck(uc, k)
+        # nancheck(vc, k)
 
         u = ustar + alpha * uc
-        v = vstar + alpha * vc
+        # v = vstar + alpha * vc
 
-        apply_BC!(u, v, P, P_ref, U_inlet)
+        apply_BC!(u, v, P, P_ref, U_inlet, P_outlet, PGrad, dx)
 
-        error = maximum(abs.(uc)) / Uref
-        if error <= 1e-10
-            print("Converged in $k iterations. error = $error")
+        # error = maximum(abs.(uc)) / Uref
+        # if error <= 1e-10
+        #     print("Converged in $k iterations. error = $error")
 
-            break
-        end
+        #     break
+        # end
 
 
-        println("Iteration $k: Error=$error")
-        println(", pprime max = ", maximum(abs.(p_prime)))
-        println("ustar max = $(maximum(abs.(ustar)))")
-        println("--------------------------------\n")
+        # println("Iteration $k: Error=$error")
+        # println(", pprime max = ", maximum(abs.(p_prime)))
+        # println("ustar max = $(maximum(abs.(ustar)))")
+        # println("--------------------------------\n")
 
         # clim = maximum(abs, P)
-        contourf!(x, y, P',
-            xlabel="x",
-            ylabel="y",
-            title="Pressure (Iteration $k)",
-            color=:viridis,
-            levels=20,          # number of contour levels; adjust as needed
-            linewidth=0,
-            aspect_ratio=1,
-            # clims=(-clim, clim)
-        )
-        display(hmm)
-        # sleep(1)
+        if k % 100 == 0
+            lal = contourf(x, y, u',
+                xlabel="x",
+                ylabel="y",
+                title="x velocity (Iteration $k)",
+                color=:viridis,
+                levels=20,          # number of contour levels; adjust as needed
+                linewidth=0,
+                aspect_ratio=1,
+                # clims=(-clim, clim)
+            )
+            display(lal)
+            # sleep(1)
+        end
 
-        if maximum(P) > 100
+        if maximum(P) > 5
             print("iteration $k")
             throw(ErrorException("P is diverging."))
         end
-
+        # if k == 1
+        #     println("u max = $(maximum(u))")
+        #     tttt = plot(u[20, :], range(1, Ny + 2))
+        #     display(tttt)
+        #     throw(ErrorException("the line ends here"))
+        # end
     end
 end
 
 begin
-    contourf(x, y, P',
+    tttt = plot(u[20, :], range(1, Ny + 2))
+    plot!(U_inlet, range(1, Ny + 2), linestyle=:dashdot)
+    display(tttt)
+end
+
+begin
+    contourf(x, y, u',
         xlabel="x",
         ylabel="y",
-        title="Pressure",
+        title="vel",
         color=:viridis,
         levels=20,          # number of contour levels; adjust as needed
         linewidth=0,
         aspect_ratio=1)
-
 end
+
