@@ -46,24 +46,28 @@ function v_coefficients(u, v, dx, dy, Re, Nx, Ny)
     return av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1
 end
 
-function y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, omega=1.5)
-    V = zeros(Nx + 2, Ny + 2)
-    for k in 1:10000
-        for j in 2:Ny
+function y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, omega=1)
+    V = deepcopy(v)
+    for k in 1:2000
+        for j in 2:Ny+1
             for i in 2:Nx+1
-                test = (dx * (P[i, j] - P[i, j+1]) - av_ip1j[i, j] * v[i+1, j]
+                test = (dx * (P[i, j] - P[i, j+1]) - av_ip1j[i, j] * V[i+1, j]
                         -
-                        av_im1j[i, j] * v[i-1, j] - av_ijp1[i, j] * v[i, j+1]
+                        av_im1j[i, j] * V[i-1, j] - av_ijp1[i, j] * V[i, j+1]
                         -
-                        av_ijm1[i, j] * v[i, j-1]) / av_ij[i, j]
-                V[i, j] = (1 - omega) * v[i, j] + omega * test
+                        av_ijm1[i, j] * V[i, j-1]) / av_ij[i, j]
+                V[i, j] = (1 - omega) * V[i, j] + omega * test
+                if isnan(test)
+                    println("i=$i, j=$j")
+                    throw(ErrorException("nan in v here"))
+                end
             end
         end
-        V[:, 1] .= 0
-        V[:, end-1] .= 0 # because of forward staggering
-        # V[:, end] .= 0
-        v[1, :] = v[2, :]
-        v[end, :] = v[end-1, :]
+        # V[:, 1] .= 0
+        # V[:, end-1] .= 0 # because of forward staggering
+        # # V[:, end] .= 0
+        # v[1, :] = v[2, :]
+        # v[end, :] = v[end-1, :]
     end
     return V
 end
@@ -168,8 +172,8 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5)
 
     for k in 1:10000
         res = 0
-        for j in 3:Ny
-            for i in 3:Nx
+        for j in 3:Ny+1
+            for i in 3:Nx+1
                 a_e = dy^2 / auij[i, j]
                 a_w = dy^2 / auij[i-1, j]
                 a_n = dx^2 / avij[i, j]

@@ -102,7 +102,8 @@ end
 begin
     alpha_p = 0.05
     alpha_u = 0.1
-    Re = 100
+    alpha_v = 0.001
+    Re = 10
     PGrad = -0.1
     u = ones(Nx + 2, Ny + 2)
     v = zeros(Nx + 2, Ny + 2)
@@ -127,10 +128,10 @@ begin
     println("u max = $(maximum(abs.(u)))")
 
     # clim = maximum(abs, P)
-    hmm = contourf(x, y, u',
+    hmm = contourf(x, y, P',
         xlabel="x",
         ylabel="y",
-        title="x vel (initial condition)",
+        title="Pressure (initial condition)",
         color=:viridis,
         levels=20,          # number of contour levels; adjust as needed
         linewidth=0,
@@ -147,7 +148,7 @@ begin
     for k in 1:10000
         av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
         au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        # vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1)
+        # vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, 0.001)
         vstar = zeros(Nx + 2, Ny + 2)
         ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet, 0.1)
         # ustar = deepcopy(u)
@@ -162,7 +163,7 @@ begin
         nancheck(P, k)
 
         uc = zeros(Nx + 2, Ny + 2)
-        # vc = zeros(Nx + 2, Ny + 2)
+        vc = zeros(Nx + 2, Ny + 2)
         for j in 2:Ny+1
             for i in 2:Nx+1
                 uc[i, j] = (dy / au_ij[i, j]) * (p_prime[i, j] - p_prime[i+1, j])
@@ -174,22 +175,23 @@ begin
         # nancheck(vc, k)
 
         u = ustar + alpha_u * uc
-        # v = vstar + alpha * vc
+        v = vstar + alpha_v * vc
 
         apply_BC!(u, v, P, P_ref, U_inlet, P_outlet, PGrad, dx)
 
         error = norm(uc) / norm(u)
 
         # clim = maximum(abs, P)
-        if k % 10 == 0
+        if k % 1 == 0
             println("Iteration $k: Error=$error")
             println(", pprime max = ", maximum(abs.(p_prime)))
             println("ustar max = $(maximum(abs.(ustar)))")
+            println("vstar max = $(maximum(abs.(vstar)))")
             println("--------------------------------\n")
-            lal = contourf(x, y, u',
+            lal = contourf(x, y, P',
                 xlabel="x",
                 ylabel="y",
-                title="x velocity (Iteration $k)",
+                title="Pressure (Iteration $k)",
                 color=:viridis,
                 levels=20,          # number of contour levels; adjust as needed
                 linewidth=0,
