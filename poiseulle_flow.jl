@@ -61,21 +61,21 @@ function apply_BC!(u, v, P, P_ref, u_in, P_out, grad, dx)
     Applies relevant boundary conditions to the variables
     """
     # Inlet
-    u[1, :] = u_in #(Re * PGrad) .* (0.5 .* y) .* (1 .- y)
-    u[2, :] = u[1, :]
+    # u[1, :] = u_in #(Re * PGrad) .* (0.5 .* y) .* (1 .- y)
+    # u[2, :] = u[1, :]
     v[1, :] .= 0
     # P[1, :] .= P_ref
     P[2, :] = P[3, :] .- grad * dx
     P[1, :] = P[2, :] .- grad * dx
     # u[2, :] = u[3, :]
-    # u[1, :] = u[2, :]
+    u[1, :] = u[2, :]
 
     # Oulet
     # u[end, :] = u[end-1, :]
-    u[end, :] = u_in
-    u[end-1, :] = u[end, :]
+    # u[end, :] = u_in
+    # u[end-1, :] = u[end, :]
     # u[end-1, :] = u[end-2, :]
-    # u[end, :] = u[end-1, :]
+    u[end, :] = u[end-1, :]
     P[end, :] .= 0
     v[end, :] .= 0
 
@@ -210,7 +210,7 @@ begin
             print("iteration $k: max P = $(maximum(P))")
             throw(ErrorException("P is diverging."))
         end
-        if error <= 1e-8
+        if error <= 1e-4
             print("Converged in $k iterations. error = $error")
 
             break

@@ -135,6 +135,10 @@ function x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_i
                     println("i=$i, j=$j")
                     throw(ErrorException("nan in u here"))
                 end
+                if pred > 100 * maximum(u_in)
+                    println("predi = $pred")
+                    throw(ErrorException("diverging"))
+                end
             end
         end
         # # Inlet
