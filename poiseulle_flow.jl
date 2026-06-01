@@ -25,7 +25,7 @@ using solvers
 begin
     Ly = 1.0
     Lx = 4.0
-    Ny = 10
+    Ny = 20
     Nx = convert(Int32, Ny * (Lx / Ly))
     dx = Lx / Nx
     dy = Ly / Ny
@@ -103,11 +103,11 @@ end
 
 # Computational loop
 begin
-    alpha_p = 0.5
+    alpha_p = 0.1
     alpha_u = 1
-    alpha_v = 0.001
-    Re = 10
-    PGrad = -0.1
+    alpha_v = 1
+    Re = 1000
+    PGrad = -1
     u = ones(Nx + 2, Ny + 2)
     v = ones(Nx + 2, Ny + 2)
     P = zeros(Nx + 2, Ny + 2)
@@ -150,14 +150,18 @@ begin
     # p_prime = zeros(Nx + 2, Ny + 2)
 
     for k in 1:10000
-        av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, alpha_v)
+        # av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
+        av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients_upwind(u, v, dx, dy, Nx, Ny, Re)
+        # au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
+        au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients_upwind(u, v, dx, dy, Nx, Ny, Re)
+        # vstar = solvers.y_momentum_GS_returning(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, alpha_v)
+        vstar = solvers.y_momentum_upwind(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, alpha_v)
         # vstar = zeros(Nx + 2, Ny + 2)
-        ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet, alpha_u)
+        # ustar = solvers.x_momentum_GS_returning(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, U_inlet, alpha_u)
+        ustar = solvers.x_momentum_upwind(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, alpha_u, 4000)
         # ustar = deepcopy(u)
         # solvers.x_momentum_upwind!(ustar, v, P, dx, dy, Nx, Ny, Re, U_inlet)
-        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, 1.5)
+        p_prime = solvers.pressure_correction(ustar, vstar, P, dx, dy, Nx, Ny, au_ij, av_ij, alpha_p)
 
         P += alpha_p * p_prime
 
@@ -195,7 +199,7 @@ begin
             lal = contourf(x, y, P',
                 xlabel="x",
                 ylabel="y",
-                title="Pressure (Iteration $k)",
+                title="P (Iteration $k)",
                 color=:viridis,
                 levels=20,          # number of contour levels; adjust as needed
                 linewidth=0,
@@ -237,7 +241,7 @@ begin
     end
 end
 
-contourf(x, y, v',
+contourf(x, y, u',
     xlabel="x",
     ylabel="y",
     # title="x velocity (Iteration $k)",

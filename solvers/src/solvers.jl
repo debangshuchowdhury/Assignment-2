@@ -212,65 +212,109 @@ function pressure_correction(u, v, P, dx, dy, Nx, Ny, auij, avij, omega=1.5, p_p
     return p_prime
 end
 
-function x_momentum_upwind!(u, v, P, dx, dy, Nx, Ny, Re, u_in)
+function u_coefficients_upwind(u, v, dx, dy, Nx, Ny, Re)
     """
-    upwind first introduced by gentry, martin, daly
+    Recovers coefficients of upwwind scheme for x momentum equation
     """
-    # U = zeros(Nx + 2, Ny + 2)
-    scale = norm(u)
-    for k in 1:1000000
-        res = 0
-        for j in 2:Ny+1
-            for i in 2:Nx+1
-                uR = 0.5 * (u[i, j] + u[i+1, j])
-                uL = 0.5 * (u[i, j] + u[i-1, j])
-                vN = 0.5 * (v[i, j] + v[i+1, j])
-                vS = 0.5 * (v[i, j-1] + v[i+1, j-1])
-                if uR > 0
-                    ζR = u[i, j]
-                else
-                    ζR = u[i+1, j]
-                end
-                if uL > 0
-                    ζL = u[i-1, j]
-                else
-                    ζL = u[i, j]
-                end
-                if vN > 0
-                    ζN = u[i, j]
-                else
-                    ζN = u[i, j+1]
-                end
-                if vS > 0
-                    ζS = u[i, j-1]
-                else
-                    ζS = u[i, j]
-                end
-                du2dx = (uR * ζR - uL * ζL) / dx
-                dvudy = (vN * ζN - vS * ζS) / dy
-                diffu = ((u[i+1, j] - 2 * u[i, j] + u[i-1, j]) / (dx * dx) + (u[i, j+1] - 2 * u[i, j] + u[i, j-1]) / (dy * dy))
+    au_ij = zeros(Nx + 2, Ny + 2)
+    au_ip1j = zeros(Nx + 2, Ny + 2)
+    au_im1j = zeros(Nx + 2, Ny + 2)
+    au_ijp1 = zeros(Nx + 2, Ny + 2)
+    au_ijm1 = zeros(Nx + 2, Ny + 2)
 
-                test = -(P[i+1, j] - P[i, j]) / dx - du2dx - dvudy + diffu / Re
-                pred = u[i, j] + 0.0001 * test
-                res += abs(u[i, j] - pred)^2
-                u[i, j] = pred
-            end
+    for j in 2:Ny+1
+        for i in 2:Nx+1
+            adv_e = 0.5 * (u[i+1, j] + u[i, j])
+            adv_w = 0.5 * (u[i-1, j] + u[i, j])
+            adv_n = 0.5 * (v[i+1, j] + v[i, j])
+            adv_s = 0.5 * (v[i, j-1] + v[i+1, j-1])
+            au_ip1j[i, j] = maximum([0, -adv_e]) * dy
+            au_im1j[i, j] = maximum([0, adv_w]) * dy
+            au_ijp1[i, j] = maximum([0, -adv_n]) * dx
+            au_ijm1[i, j] = maximum([0, adv_s]) * dx
+            au_ij[i, j] = au_ip1j[i, j] + au_im1j[i, j] + au_ijp1[i, j] + au_ijm1[i, j]
         end
-        u[1, :] = u_in
-        u[end-1, :] = u_in
-        # u[end, :] = u_in
-        u[:, 1] = -u[:, 2]
-        u[:, end] = -u[:, end-1]
-
-        if res / scale < 1e-6
-            println("breakout")
-            break
-        end
-
     end
-    println("ustar solver did not converge.")
-    println("err = $(res/scale)")
+    au_ip1j = au_ip1j .- (1 / Re) * (dy / dx)
+    au_im1j = au_im1j .- (1 / Re) * (dy / dx)
+    au_ijp1 = au_ijp1 .- (1 / Re) * (dx / dy)
+    au_ijm1 = au_ijm1 .- (1 / Re) * (dx / dy)
+    au_ij = au_ij .+ (2 / Re) * (dx / dy + dy / dx)
+
+    return au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1
 end
 
+function x_momentum_upwind(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, omega=1, niter=2000)
+    """
+    upwind x momentum
+    """
+    U = deepcopy(u)
+    for k in 1:niter
+        # res = 0
+        for j in 2:Ny+1
+            for i in 2:Nx+1
+                test = (dy * (P[i, j] - P[i+1, j]) - au_ip1j[i, j] * U[i+1, j]
+                        -
+                        au_im1j[i, j] * U[i-1, j] - au_ijp1[i, j] * U[i, j+1]
+                        -
+                        au_ijm1[i, j] * U[i, j-1]) / au_ij[i, j]
+                U[i, j] = (1 - omega) * U[i, j] + omega * test
+            end
+        end
+    end
+    return U
+end
+
+function v_coefficients_upwind(u, v, dx, dy, Nx, Ny, Re)
+    """
+    Recovers coefficients of upwind scheme for y momentum equation
+    """
+    av_ij = zeros(Nx + 2, Ny + 2)
+    av_ip1j = zeros(Nx + 2, Ny + 2)
+    av_im1j = zeros(Nx + 2, Ny + 2)
+    av_ijp1 = zeros(Nx + 2, Ny + 2)
+    av_ijm1 = zeros(Nx + 2, Ny + 2)
+
+    for j in 2:Ny+1
+        for i in 2:Nx+1
+            adv_e = 0.5 * (u[i, j] + u[i, j+1])
+            adv_w = 0.5 * (u[i-1, j] + u[i-1, j+1])
+            adv_n = 0.5 * (v[i, j] + v[i, j+1])
+            adv_s = 0.5 * (v[i, j-1] + v[i, j])
+            av_ip1j[i, j] = maximum([0, -adv_e]) * dy
+            av_im1j[i, j] = maximum([0, adv_w]) * dy
+            av_ijp1[i, j] = maximum([0, -adv_n]) * dx
+            av_ijm1[i, j] = maximum([0, adv_s]) * dx
+            av_ij[i, j] = av_ip1j[i, j] + av_im1j[i, j] + av_ijp1[i, j] + av_ijm1[i, j]
+        end
+    end
+    av_ip1j = av_ip1j .- (1 / Re) * (dy / dx)
+    av_im1j = av_im1j .- (1 / Re) * (dy / dx)
+    av_ijp1 = av_ijp1 .- (1 / Re) * (dx / dy)
+    av_ijm1 = av_ijm1 .- (1 / Re) * (dx / dy)
+    av_ij = av_ij .+ (2 / Re) * (dx / dy + dy / dx)
+
+    return av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1
+end
+
+function y_momentum_upwind(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, omega=1, niter=2000)
+    """
+    upwind y momentum
+    """
+    V = deepcopy(v)
+    for k in 1:niter
+        for j in 2:Ny+1
+            for i in 2:Nx+1
+                test = (dx * (P[i, j] - P[i, j+1]) - av_ip1j[i, j] * V[i+1, j]
+                        -
+                        av_im1j[i, j] * V[i-1, j] - av_ijp1[i, j] * V[i, j+1]
+                        -
+                        av_ijm1[i, j] * V[i, j-1]) / av_ij[i, j]
+                V[i, j] = (1 - omega) * V[i, j] + omega * test
+            end
+        end
+    end
+    return V
+end
 
 end
