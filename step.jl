@@ -11,7 +11,7 @@ using solvers
 # Define grid
 begin
     Ly = 1.0
-    Lx = 8.0
+    Lx = 10.0
     Ny = 15
     Nx = convert(Int32, Ny * (Lx / Ly))
     dx = Lx / Nx
@@ -78,8 +78,18 @@ function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy)
 
 
     # outlet
-    u[end, (2:end-1)] = u[end-1, (2:end-1)] .+ dx / dy * (v[end-1, (2:end-1)] - v[end-1, (3:end)])
+    u[end, :] = u[end-1, :] .+ dx / dy * (v[end-1, :] - v[end-1, :])
     P[end, :] .= P_ref
+
+
+    # walls
+    P[:, end] = P[:, end-1]
+    P[:, 1] = P[:, 2]
+    u[:, 1] = -u[:, 2]
+    u[:, end] = -u[:, end-1]
+    v[:, 1] .= 0
+    v[:, end-1] .= 0
+    v[:, end] .= 0
 
 
     # step 
@@ -90,15 +100,6 @@ function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy)
     P[stepindx, 1:stepindy] = P[stepindx+1, 1:stepindy]
     u[stepindx, 1:stepindy] .= 0
     v[stepindx, 1:stepindy-1] = -v[stepindx+1, 1:stepindy-1]
-
-    # walls
-    P[:, end] = P[:, end-1]
-    P[:, 1] = P[:, 2]
-    u[:, 1] = -u[:, 2]
-    u[:, end] = -u[:, end-1]
-    v[:, 1] .= 0
-    v[:, end-1] .= 0
-    v[:, end] .= 0
 end
 
 
@@ -114,13 +115,14 @@ begin
     P = ones(Nx + 2, Ny + 2)
     apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy)
 
-    for k in 1:10000
+
+    for k in 1:100000
         av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
         au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        vstar = solvers.y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, alpha_v)
-        ustar = solvers.x_momentum_GS_returning_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, alpha_u)
+        vstar = solvers.y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, alpha_v, 2000)
+        ustar = solvers.x_momentum_GS_returning_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, alpha_u, 2000)
         # solvers.x_momentum_upwind!(ustar, v, P, dx, dy, Nx, Ny, Re, U_inlet)
-        p_prime = solvers.pressure_correction_step(ustar, vstar, dx, dy, Nx, Ny, au_ij, av_ij, stepindx, stepindy, alpha_p)
+        p_prime, b = solvers.pressure_correction_step(ustar, vstar, dx, dy, Nx, Ny, au_ij, av_ij, stepindx, stepindy, alpha_p, 10000)
 
         P = P + alpha_p * p_prime
 
@@ -141,10 +143,11 @@ begin
 
         apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy)
 
+
         error = norm(uc) / norm(u)
 
-        if k % 10 == 0
-            println("Iteration $k: Error=$error")
+        if k % 1 == 0
+            println("Iteration $k: Error=$error, b=$b")
             println(", pprime max = ", maximum(abs.(p_prime)))
             println("ustar max = $(maximum(abs.(ustar)))")
             println("vstar max = $(maximum(abs.(vstar)))")
@@ -169,7 +172,7 @@ begin
             print("iteration $k: max P = $(maximum(P))")
             throw(ErrorException("P is diverging."))
         end
-        if error <= 1e-10
+        if error <= 1e-10 || b <= 3e-6
             print("Converged in $k iterations. error = $error")
 
             break
@@ -178,10 +181,10 @@ begin
     end
 end
 
-Plots.contourf(x, y, u',
+Plots.contourf(x, y, P',
     xlabel="x",
     ylabel="y",
-    title="Final u Field",
+    title="Final P Field",
     color=:viridis,
     levels=20,
     linewidth=0,

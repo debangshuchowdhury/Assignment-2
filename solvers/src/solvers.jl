@@ -317,9 +317,9 @@ function y_momentum_upwind(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, a
     return V
 end
 
-function x_momentum_GS_returning_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, omega=1)
+function x_momentum_GS_returning_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, omega=1, niter=2000)
     U = deepcopy(u)
-    for k in 1:2000
+    for k in 1:niter
         res = 0
         for j in 2:Ny+1
             for i in 2:Nx+1
@@ -351,9 +351,9 @@ function x_momentum_GS_returning_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j,
     return U
 end
 
-function y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, omega=1)
+function y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, omega=1, niter=2000)
     V = deepcopy(v)
-    for k in 1:2000
+    for k in 1:niter
         for j in 2:Ny+1
             for i in 2:Nx+1
                 if i <= stepindx && j <= stepindy
@@ -375,15 +375,16 @@ function y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j,
     return V
 end
 
-function pressure_correction_step(u, v, dx, dy, Nx, Ny, auij, avij, stepindx, stepindy, omega=1.5)
+function pressure_correction_step(u, v, dx, dy, Nx, Ny, auij, avij, stepindx, stepindy, omega=1.5, niter=10000)
     """
     Solves the pressure correction equation and returns the pressure correction field
     """
 
     p_prime = zeros(Float64, Nx + 2, Ny + 2)
 
-    for k in 1:10000
+    for k in 1:niter
         res = 0
+        bs = 0
         for j in 3:Ny+1
             for i in 3:Nx+1
                 if i <= stepindx && j <= stepindy
@@ -395,6 +396,7 @@ function pressure_correction_step(u, v, dx, dy, Nx, Ny, auij, avij, stepindx, st
                 a_s = dx^2 / avij[i, j-1]
                 a_p = (a_e + a_w + a_n + a_s)
                 b = dy * (u[i-1, j] - u[i, j]) + dx * (v[i, j-1] - v[i, j])
+                bs += b * b
                 test = (a_e * p_prime[i+1, j] + a_w * p_prime[i-1, j] + a_n * p_prime[i, j+1] + a_s * p_prime[i, j-1] + b) / a_p
                 if isnan(p_prime[i, j])
                     println("a_e=$a_e, a_w=$a_w, a_n=$a_n, a_s=$a_s, a_p=$a_p")
@@ -411,13 +413,15 @@ function pressure_correction_step(u, v, dx, dy, Nx, Ny, auij, avij, stepindx, st
         end
         p_prime[1, :] = p_prime[3, :]
         p_prime[2, :] = p_prime[3, :]
+
         if res < 1e-6
             # println("breakout")
-            return p_prime
+            return p_prime, bs
         end
+
     end
     # println("pressure correction did not converge (err = $(norm(p_prime))")
-    return p_prime
+    return p_prime, bs
 end
 
 end
