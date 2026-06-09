@@ -375,13 +375,116 @@ function y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j,
     return V
 end
 
+function u_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
+    """
+    Recovers coefficients of upwwind scheme for x momentum equation
+    """
+    au_ij = zeros(Nx + 2, Ny + 2)
+    au_ip1j = zeros(Nx + 2, Ny + 2)
+    au_im1j = zeros(Nx + 2, Ny + 2)
+    au_ijp1 = zeros(Nx + 2, Ny + 2)
+    au_ijm1 = zeros(Nx + 2, Ny + 2)
+
+    for j in 2:Ny+1
+        for i in 2:Nx+1
+            if i <= stepindx && j <= stepindy
+                continue
+            end
+            if i == stepindx + 1 && j <= stepindy
+                au_im1j[i, j] = 0
+                kw = 0
+            else
+                adv_w = 0.5 * (u[i-1, j] + u[i, j])
+                au_im1j[i, j] = maximum([0, adv_w]) * dy
+                kw = 1
+            end
+            if j == stepindy + 1 && i <= stepindx
+                au_ijm1[i, j] = 0
+                ks = 0
+            else
+                adv_s = 0.5 * (v[i, j-1] + v[i+1, j-1])
+                au_ijm1[i, j] = maximum([0, adv_s]) * dx
+                ks = 1
+            end
+            adv_e = 0.5 * (u[i+1, j] + u[i, j])
+            adv_n = 0.5 * (v[i+1, j] + v[i, j])
+            au_ip1j[i, j] = maximum([0, -adv_e]) * dy
+            au_ijp1[i, j] = maximum([0, -adv_n]) * dx
+            au_ij[i, j] = au_ip1j[i, j] + au_im1j[i, j] + au_ijp1[i, j] + au_ijm1[i, j] + (1 + ks) * (dx / dy) / Re + (1 + kw) * (dy / dx) / Re
+            au_ip1j[i, j] += (1 / Re) * (dy / dx)
+            au_im1j[i, j] += (1 / Re) * (dy / dx) * ks
+            au_ijp1[i, j] += (1 / Re) * (dx / dy)
+            au_ijm1[i, j] += (1 / Re) * (dx / dy) * kw
+        end
+    end
+    # au_ip1j = au_ip1j .- (1 / Re) * (dy / dx)
+    # au_im1j = au_im1j .- (1 / Re) * (dy / dx)
+    # au_ijp1 = au_ijp1 .- (1 / Re) * (dx / dy)
+    # au_ijm1 = au_ijm1 .- (1 / Re) * (dx / dy)
+    # au_ij = au_ij .+ (2 / Re) * (dx / dy + dy / dx)
+
+    return au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1
+end
+
+function v_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
+    """
+    Recovers coefficients of upwind scheme for y momentum equation
+    """
+    av_ij = zeros(Nx + 2, Ny + 2)
+    av_ip1j = zeros(Nx + 2, Ny + 2)
+    av_im1j = zeros(Nx + 2, Ny + 2)
+    av_ijp1 = zeros(Nx + 2, Ny + 2)
+    av_ijm1 = zeros(Nx + 2, Ny + 2)
+
+    for j in 2:Ny+1
+        for i in 2:Nx+1
+            if i <= stepindx && j <= stepindy
+                continue
+            end
+            if i == stepindx + 1 && j <= stepindy
+                av_im1j[i, j] = 0
+                kw = 0
+            else
+                adv_w = 0.5 * (u[i-1, j] + u[i-1, j+1])
+                av_im1j[i, j] = maximum([0, adv_w]) * dy
+                kw = 1
+            end
+            if j == stepindy + 1 && i <= stepindx
+                av_ijm1[i, j] = 0
+                ks = 0
+            else
+                adv_s = 0.5 * (v[i, j-1] + v[i, j])
+                av_ijm1[i, j] = maximum([0, adv_s]) * dx
+                ks = 1
+            end
+            adv_e = 0.5 * (u[i, j] + u[i, j+1])
+            adv_n = 0.5 * (v[i, j] + v[i, j+1])
+            av_ip1j[i, j] = maximum([0, -adv_e]) * dy
+            av_ijp1[i, j] = maximum([0, -adv_n]) * dx
+
+            av_ij[i, j] = av_ip1j[i, j] + av_im1j[i, j] + av_ijp1[i, j] + av_ijm1[i, j] + (1 + ks) * (dx / dy) / Re + (1 + kw) * (dy / dx) / Re
+            av_ip1j[i, j] += (1 / Re) * (dy / dx)
+            av_im1j[i, j] += (1 / Re) * (dy / dx) * kw
+            av_ijp1[i, j] += (1 / Re) * (dx / dy)
+            av_ijm1[i, j] += (1 / Re) * (dx / dy) * ks
+        end
+    end
+    # av_ip1j = av_ip1j .- (1 / Re) * (dy / dx)
+    # av_im1j = av_im1j .- (1 / Re) * (dy / dx)
+    # av_ijp1 = av_ijp1 .- (1 / Re) * (dx / dy)
+    # av_ijm1 = av_ijm1 .- (1 / Re) * (dx / dy)
+    # av_ij = av_ij .+ (2 / Re) * (dx / dy + dy / dx)
+
+    return av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1
+end
+
 function pressure_correction_step(u, v, dx, dy, Nx, Ny, auij, avij, stepindx, stepindy, omega=1.5, niter=10000)
     """
     Solves the pressure correction equation and returns the pressure correction field
     """
 
     p_prime = zeros(Float64, Nx + 2, Ny + 2)
-
+    bs = 0
     for k in 1:niter
         res = 0
         bs = 0
@@ -414,22 +517,13 @@ function pressure_correction_step(u, v, dx, dy, Nx, Ny, auij, avij, stepindx, st
                 p_prime[i, j] = new
             end
         end
-        # p_prime[1, :] = p_prime[2, :]
-        # p_prime[1, :] = p_prime[2, :]
-        # p_prime[:, end] = p_prime[:, end-1]
-        # p_prime[end, :] = p_prime[end-1, :]
-        # p_prime[stepindx+1:end, 2] = p_prime[stepindx+1:end, 3]
-        # p_prime[stepindx+1:end, 1] = p_prime[stepindx+1:end, 2]
-        # p_prime[:, end] = p_prime[:, end-1]
+        p_prime[:, 1] = p_prime[:, 2]
+        p_prime[1, :] = p_prime[2, :]
+        p_prime[:, end] = p_prime[:, end-1]
+        p_prime[1:stepindx, stepindy] = p_prime[1:stepindx, stepindy+1]
+        p_prime[stepindx, 1:stepindy-1] = p_prime[stepindx+1, 1:stepindy-1]
 
         # p_prime[end, :] = p_prime[end-1, :]
-        # p_prime[:, 1] = p_prime[:, 2]
-        # p_prime[:, end] = p_prime[:, end-1]
-
-        if res < 1e-6
-            # println("breakout")
-            return p_prime, bs
-        end
 
     end
     # println("pressure correction did not converge (err = $(norm(p_prime))")
@@ -445,14 +539,20 @@ function x_momentum_upwind_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ij
                 if j <= stepindy && i <= stepindx
                     continue
                 end
-                test = (dy * (P[i, j] - P[i+1, j]) - au_ip1j[i, j] * U[i+1, j]
-                        -
-                        au_im1j[i, j] * U[i-1, j] - au_ijp1[i, j] * U[i, j+1]
-                        -
-                        au_ijm1[i, j] * U[i, j-1]) / au_ij[i, j]
+                test = -(dy * (-P[i, j] + P[i+1, j]) - au_ip1j[i, j] * U[i+1, j]
+                         -
+                         au_im1j[i, j] * U[i-1, j] - au_ijp1[i, j] * U[i, j+1]
+                         -
+                         au_ijm1[i, j] * U[i, j-1]) / au_ij[i, j]
                 U[i, j] = (1 - omega) * U[i, j] + omega * test
             end
         end
+        U[end, :] = U[end-1, :]
+        U[:, 1] = -U[:, 2]
+        U[:, end] = -U[:, end-1]
+        U[1:stepindx-1, stepindy] = -U[1:stepindx-1, stepindy+1]
+        U[stepindx, 1:stepindy-1] .= 0
+
     end
     return U
 end
@@ -460,7 +560,7 @@ end
 function y_momentum_upwind_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, omega=1, niter=2000)
     V = deepcopy(v)
     for k in 1:niter
-        for j in 2:Ny+1
+        for j in 2:Ny
             for i in 2:Nx+1
                 if i <= stepindx && j <= stepindy
                     continue
@@ -468,14 +568,20 @@ function y_momentum_upwind_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ij
                 # if i == Nx+2
                 #     test = V[i-1,j] + (V[i])
                 # end
-                test = (dx * (P[i, j] - P[i, j+1]) - av_ip1j[i, j] * V[i+1, j]
-                        -
-                        av_im1j[i, j] * V[i-1, j] - av_ijp1[i, j] * V[i, j+1]
-                        -
-                        av_ijm1[i, j] * V[i, j-1]) / av_ij[i, j]
+                test = -(dx * (-P[i, j] + P[i, j+1]) - av_ip1j[i, j] * V[i+1, j]
+                         -
+                         av_im1j[i, j] * V[i-1, j] - av_ijp1[i, j] * V[i, j+1]
+                         -
+                         av_ijm1[i, j] * V[i, j-1]) / av_ij[i, j]
                 V[i, j] = (1 - omega) * V[i, j] + omega * test
             end
         end
+        V[end, :] = V[end-1, :]
+        V[1, :] .= 0
+        V[:, end-1] .= 0
+        V[:, end] .= 0
+        V[1:stepindx-1, stepindy] .= 0
+        V[stepindx, 1:stepindy] = -V[stepindx+1, 1:stepindy]
     end
     return V
 end
