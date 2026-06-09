@@ -10,9 +10,9 @@ using solvers
 
 # Define grid
 begin
-    Ly = 1.0
+    Ly = 1
     Lx = 10.0
-    Ny = 15
+    Ny = 10
     Nx = convert(Int32, Ny * (Lx / Ly))
     dx = Lx / Nx
     dy = Ly / Ny
@@ -22,7 +22,7 @@ begin
 
     # step dimensions
     step_height = floor(Ny / 2) * dy
-    step_length = floor(Nx / 4) * dx
+    step_length = floor(Nx / 3) * dx
     stepindx = convert(Int32, floor(step_length / dx)) + 1
     stepindy = convert(Int32, floor(step_height / dy)) + 1
     mask = zeros(Bool, Nx + 2, Ny + 2)
@@ -65,31 +65,38 @@ begin
 end
 
 
-function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy)
+function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy, Ny)
     """
     Applies relevant boundary conditions to the variables
     """
 
     # Inlet
+    # u[1, stepindy:end-1] = LinRange(0, uref, Ny - stepindy + 2)
     u[1, :] .= u_ref
-    P[2, :] = P[3, :]
+    # P[2, :] = P[3, :]
     P[1, :] = P[2, :]
+    # P[1, :] .= 1
+    # P[2, :] .= 1
     v[1, :] .= 0
 
 
     # outlet
-    u[end, :] = u[end-1, :] .+ dx / dy * (v[end-1, :] - v[end-1, :])
+    u[end, :] = u[end-1, :] # .+ dx / dy * (v[end-1, :] - v[end-1, :])
+    v[end, 1:end-1] = v[end-1, 1:end-1] #- (u[])
     P[end, :] .= P_ref
+    # P[end, :] = P[end-1, :]
 
 
     # walls
     P[:, end] = P[:, end-1]
     P[:, 1] = P[:, 2]
     u[:, 1] = -u[:, 2]
-    u[:, end] = -u[:, end-1]
+    # u[:, end] = -u[:, end-1]
+    u[:, end] .= 0 #u_ref
     v[:, 1] .= 0
     v[:, end-1] .= 0
     v[:, end] .= 0
+    # v[:, end] = v[:, end-1]
 
 
     # step 
@@ -98,7 +105,8 @@ function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy)
     v[1:stepindx, 1:stepindy] .= 0
     P[1:stepindx, stepindy] = P[1:stepindx, stepindy+1]
     P[stepindx, 1:stepindy] = P[stepindx+1, 1:stepindy]
-    u[stepindx, 1:stepindy] .= 0
+    P[1:stepindx-1, 1:stepindy-1] .= 1
+    u[1:stepindx, 1:stepindy] .= 0
     v[stepindx, 1:stepindy-1] = -v[stepindx+1, 1:stepindy-1]
 end
 
@@ -112,17 +120,40 @@ begin
     Pref = 0
     u = ones(Nx + 2, Ny + 2)
     v = ones(Nx + 2, Ny + 2)
-    P = ones(Nx + 2, Ny + 2)
-    apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy)
+    P = zeros(Nx + 2, Ny + 2)
+    apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy, Ny)
+
+    kkk = Plots.contourf(x, y, P',
+        xlabel="x",
+        ylabel="y",
+        title="P (initial)",
+        color=:viridis,
+        levels=20,          # number of contour levels; adjust as needed
+        linewidth=0,
+        aspect_ratio=1,
+        # clims=(-clim, clim)
+        # xlims=[7.5, 15],
+        # ylims=[-dy, 2]
+    )
+    # Plots.hline!([step_height], color=:black, label=:false)
+    # Plots.vline!([step_length], color=:black, label=:false)
+    Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
+    Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
+    display(kkk)
+    # sakdw
 
 
-    for k in 1:100000
-        av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        vstar = solvers.y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, alpha_v, 2000)
-        ustar = solvers.x_momentum_GS_returning_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, alpha_u, 2000)
+    for k in 1:1000000
+        # av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
+        # au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
+        av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients_upwind(u, v, dx, dy, Nx, Ny, Re)
+        au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients_upwind(u, v, dx, dy, Nx, Ny, Re)
+        # vstar = solvers.y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, alpha_v, 2000)
+        # ustar = solvers.x_momentum_GS_returning_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, alpha_u, 2000)
+        vstar = solvers.y_momentum_upwind_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, alpha_v, 100)
+        ustar = solvers.x_momentum_upwind_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, alpha_u, 100)
         # solvers.x_momentum_upwind!(ustar, v, P, dx, dy, Nx, Ny, Re, U_inlet)
-        p_prime, b = solvers.pressure_correction_step(ustar, vstar, dx, dy, Nx, Ny, au_ij, av_ij, stepindx, stepindy, alpha_p, 10000)
+        p_prime, b = solvers.pressure_correction_step(ustar, vstar, dx, dy, Nx, Ny, au_ij, av_ij, stepindx, stepindy, alpha_p, 200)
 
         P = P + alpha_p * p_prime
 
@@ -141,38 +172,43 @@ begin
         u = ustar + uc
         v = vstar + uc
 
-        apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy)
+        apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy, Ny)
 
 
-        error = norm(uc) / norm(u)
+        error = max(norm(uc) / norm(u), norm(vc) / norm(v))
 
-        if k % 1 == 0
+        if k % 100 == 0
             println("Iteration $k: Error=$error, b=$b")
             println(", pprime max = ", maximum(abs.(p_prime)))
             println("ustar max = $(maximum(abs.(ustar)))")
             println("vstar max = $(maximum(abs.(vstar)))")
             println("--------------------------------\n")
-            lal = Plots.contourf(x, y, u',
+            lal = Plots.contourf(x, y, P',
                 xlabel="x",
                 ylabel="y",
-                title="u (Iteration $k)",
+                title="P (Iteration $k)",
                 color=:viridis,
                 levels=20,          # number of contour levels; adjust as needed
                 linewidth=0,
                 aspect_ratio=1,
                 # clims=(-clim, clim)
+                # xlims=[7.5, 15],
+                # ylims=[-dy, 2]
             )
-            Plots.hline!([step_height], color=:black, label=:false)
-            Plots.vline!([step_length], color=:black, label=:false)
+            # Plots.hline!([step_height], color=:black, label=:false)
+            # Plots.vline!([step_length], color=:black, label=:false)
+            Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
+            Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
             Plots.display(lal)
             # sleep(1)
+            # ighg
         end
 
         if maximum(P) > 1000
             print("iteration $k: max P = $(maximum(P))")
             throw(ErrorException("P is diverging."))
         end
-        if error <= 1e-10 || b <= 3e-6
+        if b <= 1e-15 #error <= 1e-10 || 
             print("Converged in $k iterations. error = $error")
 
             break
@@ -186,9 +222,10 @@ Plots.contourf(x, y, P',
     ylabel="y",
     title="Final P Field",
     color=:viridis,
-    levels=20,
+    levels=1000,
     linewidth=0,
     aspect_ratio=1,
+    # colormap=:fire
     # clims=(-clim, clim)
 )
 
@@ -198,18 +235,20 @@ Plots.contourf(x, y, sqrt.(u .* u + v .* v)',
     ylabel="y",
     # title="x velocity (Iteration $k)",
     color=:viridis,
-    levels=20,
+    levels=200,
     linewidth=0,
     aspect_ratio=1,
     # clims=(-clim, clim)
 )
+
+Plots.plot(u[30, :], y)
 
 
 
 # AI GENERATED 
 
 using GLMakie
-using LinearInterpolations  # for bilinear interpolation
+# using LinearInterpolations  # for bilinear interpolation
 
 function bilinear_interp(xc, yc, f, xi, yi)
     # Find surrounding indices
@@ -288,7 +327,7 @@ end
 
 fig = plot_streamlines(u, v, x, y, stepindx, stepindy, dx, dy)
 
-save("streamlines10longer.png", fig)
+save("streamlines1.png", fig)
 
 
 function plot_velocity_arrows(u, v, x, y, stepindx, stepindy)
