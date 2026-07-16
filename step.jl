@@ -11,11 +11,11 @@ using JLD2
 
 # Define grid
 begin
-    Ly = 2
-    Lx = 10
+    Ly = 1
+    Lx = 8
     Ny = 50
-    println("nx=$Nx, ny=$Ny")
     Nx = convert(Int32, Ny * (Lx / Ly))
+    println("nx=$Nx, ny=$Ny")
     dx = Lx / Nx
     dy = Ly / Ny
     x = collect(round.(LinRange(-dx / 2, Lx + dx / 2, Nx + 2), digits=6))
@@ -24,47 +24,13 @@ begin
 
     # step dimensions
     step_height = floor(Ny / 2) * dy
-    step_length = floor(Nx / 10) * dx
+    step_length = floor(Nx / 16) * dx
     stepindx = convert(Int32, floor(step_length / dx)) + 1
     stepindy = convert(Int32, floor(step_height / dy)) + 1
-    mask = zeros(Bool, Nx + 2, Ny + 2)
-    # for i in 1:Nx+2
-    #     for j in 1:Ny+2
-    #         if i > stepindx && j > stepindy
-    #             mask[i, j] = true
-    #         end
-    #     end
-    # end
     println("stpindx = $stepindx, stepindy = $stepindy")
 end
 
 
-# Plotting computational domain to check
-begin
-    p = Plots.plot([0, 0], [0, Ly], color=:black, label=:false)
-    Plots.plot!([0, Lx], [0, 0], color=:black, label=:false)
-    Plots.plot!([Lx, Lx], [0, Ly], color=:black, label=:false)
-    Plots.plot!([0, Lx], [Ly, Ly], color=:black, label=:false)
-    for yc in y
-        for xc in x
-            if xc > 0 && yc > 0 && xc < Lx && yc < Ly && !(xc <= step_length && yc <= step_height)
-                Plots.scatter!([xc], [yc], color=:green, markersize=:4, label=false)
-            elseif xc >= 0 && yc >= 0 && xc <= step_length && yc <= step_height
-                Plots.scatter!([xc], [yc], color=:blue, markersize=:4, label=false)
-            else
-                Plots.scatter!([xc], [yc], color=:red, markersize=:4, label=false)
-            end
-
-        end
-    end
-    # scatter!(x, y, markersize=:1, label=:false, color=:black)
-    Plots.scatter!([x[stepindx]], [y[stepindy]], color=:black, markersize=:6, label="step")
-    Plots.plot!(aspect_ratio=1)
-    Plots.plot!(ylims=[-0.5, Ly + 0.5], xlims=[-0.5, Lx + 0.5])
-    Plots.hline!([step_height], color=:black, label=:false)
-    Plots.vline!([step_length], color=:black, label=:false)
-    display(p)
-end
 
 
 function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy, Ny)
@@ -74,7 +40,7 @@ function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy, Ny)
 
     # Inlet
     # u[1, stepindy:end-1] = LinRange(0, uref, Ny - stepindy + 2)
-    u[1, stepindy+1:end] .= u_ref
+    u[1, (stepindy+1):end] .= u_ref
     u[1, 1:stepindy] .= 0
     # P[2, :] = P[3, :]
     P[1, :] = P[2, :]
@@ -103,12 +69,12 @@ function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy, Ny)
 
 
     # step 
-    u[1:stepindx-1, stepindy] = -u[1:stepindx-1, stepindy+1]
+    u[1:(stepindx-1), stepindy] = -u[1:(stepindx-1), stepindy+1]
     u[stepindx, 1:stepindy] .= 0
     v[stepindx, 1:stepindy] = -v[stepindx+1, 1:stepindy]
-    v[1:stepindx-1, stepindy] .= 0
+    v[1:(stepindx-1), stepindy] .= 0
     P[1:stepindx, stepindy] = P[1:stepindx, stepindy+1]
-    P[stepindx, 1:stepindy-1] = P[stepindx+1, 1:stepindy-1]
+    P[stepindx, 1:(stepindy-1)] = P[stepindx+1, 1:(stepindy-1)]
     # P[1:stepindx-1, 1:stepindy-1] .= 1
 end
 
@@ -117,33 +83,33 @@ begin
     alpha_p = 0.05
     alpha_u = 0.1
     alpha_v = 0.1
-    Re = 100
+    Re = 400
     uref = 1
     Pref = 0
-    # u = zeros(Nx + 2, Ny + 2)
-    # v = zeros(Nx + 2, Ny + 2)
-    # P = zeros(Nx + 2, Ny + 2)
-    @load "warmup$Re.jld2" u v P
+    u = zeros(Nx + 2, Ny + 2)
+    v = zeros(Nx + 2, Ny + 2)
+    P = zeros(Nx + 2, Ny + 2)
+    # @load "warmup$Re.jld2" u v P
 
     apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy, Ny)
 
-    kkk = Plots.contourf(x, y, P',
-        xlabel="x",
-        ylabel="y",
-        title="P (initial)",
-        color=:viridis,
-        levels=200,          # number of contour levels; adjust as needed
-        linewidth=0,
-        aspect_ratio=1,
-        # clims=(-clim, clim)
-        xlims=[(stepindx - 10) * dx, (stepindx * 2) * dx],
-        ylims=[-dy, 2]
-    )
+    # kkk = Plots.contourf(x, y, P',
+    #     xlabel="x",
+    #     ylabel="y",
+    #     title="P (initial)",
+    #     color=:viridis,
+    #     levels=200,          # number of contour levels; adjust as needed
+    #     linewidth=0,
+    #     aspect_ratio=1,
+    #     # clims=(-clim, clim)
+    #     xlims=[(stepindx - 10) * dx, (stepindx * 2) * dx],
+    #     ylims=[-dy, 2]
+    # )
     # Plots.hline!([step_height], color=:black, label=:false)
     # Plots.vline!([step_length], color=:black, label=:false)
-    Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
-    Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
-    display(kkk)
+    # Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
+    # Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
+    # display(kkk)
     # sakdw
 
 
@@ -165,8 +131,8 @@ begin
 
         uc = zeros(Nx + 2, Ny + 2)
         vc = zeros(Nx + 2, Ny + 2)
-        for j in 2:Ny+1
-            for i in 2:Nx+1
+        for j in 2:(Ny+1)
+            for i in 2:(Nx+1)
                 if i <= stepindx && j <= stepindy
                     continue
                 end
@@ -190,7 +156,7 @@ begin
             println("ustar max = $(maximum(abs.(ustar)))")
             println("vstar max = $(maximum(abs.(vstar)))")
             println("--------------------------------\n")
-            if k % 20 != 0
+            if k % 10 != 0
                 continue
             end
             lal = Plots.contourf(x, y, P',
@@ -202,8 +168,8 @@ begin
                 linewidth=0,
                 aspect_ratio=1,
                 # clims=(-clim, clim)
-                xlims=[0, (3 * stepindx) * dx],
-                ylims=[-dy, 2]
+                # xlims=[0, (3 * stepindx) * dx],
+                # ylims=[-dy, 2]
             )
             # Plots.hline!([step_height], color=:black, label=:false)
             # Plots.vline!([step_length], color=:black, label=:false)
@@ -218,33 +184,41 @@ begin
             print("iteration $k: max P = $(maximum(P))")
             throw(ErrorException("P is diverging."))
         end
-        if k % 1000 == 0
-            @save "warmup$Re.jld2" u v P
+        if k % 100 == 0
+            @save "warmup$Re.jld2" u v P x y stepindx stepindy
         end
-        if b <= 1e-10 #error <= 1e-10 || 
+        if b <= 1e-12 #error <= 1e-10 || 
             print("Converged in $k iterations. error = $error")
 
             break
         end
 
     end
+    reattach = convert(Int32, stepindx .+ findfirst(z -> z > 0, u[(stepindx+1):end, 2]))
 end
 
-# @load "warmup100.jld2" u v P
+# Re = 100
+# @load "converged$Re.jld2" u v P
 
-Plots.contourf(x, y, v',
+reattach = convert(Int32, stepindx .+ findfirst(z -> z > 0, u[(stepindx+1):end, 2]))
+print("reattachment length = $(x[reattach])")
+
+Plots.contourf(x, y, u',
     xlabel="x",
     ylabel="y",
-    title="Final v Field",
+    title="Final u Field (Re = $Re)",
     color=:viridis,
-    levels=1000,
+    levels=50,
     linewidth=0,
     aspect_ratio=1,
     # colormap=:fire
     # clims=(-clim, clim)
+    xlims=[0, (8 * stepindx) * dx],
+    ylims=[-dy, 2]
 )
 Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
 Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
+Plots.vline!([x[reattach]], color=:red, label=:false)
 
 
 argmin()
@@ -291,19 +265,19 @@ function plot_streamlines(u, v, x, y, stepindx, stepindy, dx, dy)
     Ny2 = size(u, 2)
 
     # Interpolate to cell centers (interior only: i=2:Nx+1, j=2:Ny+1)
-    u_c = 0.5 .* (u[1:end-1, :] .+ u[2:end, :])   # (Nx+1, Ny+2)
-    v_c = 0.5 .* (v[:, 1:end-1] .+ v[:, 2:end])   # (Nx+2, Ny+1)
+    u_c = 0.5 .* (u[1:(end-1), :] .+ u[2:end, :])   # (Nx+1, Ny+2)
+    v_c = 0.5 .* (v[:, 1:(end-1)] .+ v[:, 2:end])   # (Nx+2, Ny+1)
 
-    u_c = u_c[2:end, 2:end-1]    # (Nx, Ny)
-    v_c = v_c[2:end-1, 2:end]    # (Nx, Ny)
+    u_c = u_c[2:end, 2:(end-1)]    # (Nx, Ny)
+    v_c = v_c[2:(end-1), 2:end]    # (Nx, Ny)
 
     # Interior cell center coordinates
-    xc = x[2:end-1]
-    yc = y[2:end-1]
+    xc = x[2:(end-1)]
+    yc = y[2:(end-1)]
 
     # Mask step
-    u_c[1:stepindx-1, 1:stepindy-1] .= 0.0
-    v_c[1:stepindx-1, 1:stepindy-1] .= 0.0
+    u_c[1:(stepindx-1), 1:(stepindy-1)] .= 0.0
+    v_c[1:(stepindx-1), 1:(stepindy-1)] .= 0.0
 
     # Velocity function for streamplot
     function velocity_field(xi, yi)
@@ -346,29 +320,29 @@ end
 
 fig = plot_streamlines(u, v, x, y, stepindx, stepindy, dx, dy)
 
-save("streamlines_longer$Re.png", fig)
+save("converged_streamlines_$Re.png", fig)
 
 
 function plot_velocity_arrows(u, v, x, y, stepindx, stepindy)
 
     # Interpolate to cell centers (interior only)
-    u_c = 0.5 .* (u[1:end-1, :] .+ u[2:end, :])
-    v_c = 0.5 .* (v[:, 1:end-1] .+ v[:, 2:end])
+    u_c = 0.5 .* (u[1:(end-1), :] .+ u[2:end, :])
+    v_c = 0.5 .* (v[:, 1:(end-1)] .+ v[:, 2:end])
 
-    u_c = u_c[2:end, 2:end-1]    # (Nx, Ny)
-    v_c = v_c[2:end-1, 2:end]    # (Nx, Ny)
+    u_c = u_c[2:end, 2:(end-1)]    # (Nx, Ny)
+    v_c = v_c[2:(end-1), 2:end]    # (Nx, Ny)
 
     # Interior cell center coordinates
-    xc = x[2:end-1]
-    yc = y[2:end-1]
+    xc = x[2:(end-1)]
+    yc = y[2:(end-1)]
 
     # Mask step
-    u_c[1:stepindx-1, 1:stepindy-1] .= 0.0
-    v_c[1:stepindx-1, 1:stepindy-1] .= 0.0
+    u_c[1:(stepindx-1), 1:(stepindy-1)] .= 0.0
+    v_c[1:(stepindx-1), 1:(stepindy-1)] .= 0.0
 
     # Normalize to unit vectors (direction only)
     mag = sqrt.(u_c .^ 2 .+ v_c .^ 2)
-    mag[mag.==0.0] .= 1.0   # avoid division by zero in step region
+    mag[mag .== 0.0] .= 1.0   # avoid division by zero in step region
     u_n = u_c ./ mag
     v_n = v_c ./ mag
 
