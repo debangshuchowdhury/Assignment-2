@@ -4,7 +4,13 @@ version = "0.1.0"
 authors = ["debangshuchowdhury <deb170203@gmail.com>"]
 
 [deps]
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LinearInterpolations = "b20c7882-2490-4592-a606-fbbfe9e745e8"
 
 [compat]
+GLMakie = "0.13.11"
+JLD2 = "0.6.4"
 LinearAlgebra = "1.12.0"
+LinearInterpolations = "0.1.4"

@@ -9,12 +9,42 @@ using solvers
 using JLD2
 
 
+# # Define grid
+# begin
+#     Ly = 1
+#     Lx = 8
+#     Ny = 50
+#     Nx = convert(Int32, Ny * (Lx / Ly))
+#     println("nx=$Nx, ny=$Ny")
+#     dx = Lx / Nx
+#     dy = Ly / Ny
+#     x = collect(round.(LinRange(-dx / 2, Lx + dx / 2, Nx + 2), digits=6))
+#     y = collect(round.(LinRange(-dy / 2, Ly + dy / 2, Ny + 2), digits=6))
+#     println("Nx = $Nx, Ny = $Ny")
+
+#     # step dimensions
+#     step_height = floor(Ny / 2) * dy
+#     step_length = floor(Nx / 16) * dx
+#     stepindx = convert(Int32, floor(step_length / dx)) + 1
+#     stepindy = convert(Int32, floor(step_height / dy)) + 1
+#     println("stpindx = $stepindx, stepindy = $stepindy")
+# end
+
+
 # Define grid
 begin
-    Ly = 1
-    Lx = 8
-    Ny = 50
-    Nx = convert(Int32, Ny * (Lx / Ly))
+    # Armaly et al. 1983 / NAFEMS dimensions (mm)
+    H_phys = 10.1     # full outlet height -> reference length
+    S_phys = 4.9      # step height
+    L1_phys = 2 * H_phys    # upstream length (extended for a developed inlet profile)
+    L2_phys = 12 * H_phys    # downstream length
+
+    upwind = false
+    Re = 168.8
+    Ly = 1.0
+    Lx = (L1_phys + L2_phys) / H_phys
+    Nx = round(Int32, Lx/(0.9 * 1.5/(Re*1.5))) # round(Int32, Ny * (Lx / Ly)) # 
+    Ny = 75 #round(Int32, Nx/10)
     println("nx=$Nx, ny=$Ny")
     dx = Lx / Nx
     dy = Ly / Ny
@@ -22,25 +52,42 @@ begin
     y = collect(round.(LinRange(-dy / 2, Ly + dy / 2, Ny + 2), digits=6))
     println("Nx = $Nx, Ny = $Ny")
 
-    # step dimensions
-    step_height = floor(Ny / 2) * dy
-    step_length = floor(Nx / 16) * dx
-    stepindx = convert(Int32, floor(step_length / dx)) + 1
-    stepindy = convert(Int32, floor(step_height / dy)) + 1
+    # step dimensions, snapped to the grid so the corner sits on a pressure-cell face
+    step_height = round(S_phys / H_phys / dy) * dy
+    step_length = round(L1_phys / H_phys / dx) * dx
+    stepindx = round(Int32, step_length / dx) + 1
+    stepindy = round(Int32, step_height / dy) + 1
     println("stpindx = $stepindx, stepindy = $stepindy")
+    println("ER = ", round(1 / (1 - step_height), digits=4))
+    println("dx = $dx, dy = $dy, Nx=$Nx, Ny=$Ny")
 end
 
 
+function para_profile(y, stepindy, step_height, Ny, dy)
+    uinlet = zeros(Ny+2)
+    ys = step_height
+    h = 1 - ys
+    c = ys + 0.5*h
+    for i in (stepindy+1):(Ny+1)
+        uinlet[i] = 1.5 * (1 - ((y[i] - c)/(0.5*h))^2)
+    end
+    uinlet = max.(uinlet, 0)
+    return uinlet
+end
 
 
-function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy, Ny)
+function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy, Ny, parainlet)
     """
     Applies relevant boundary conditions to the variables
     """
 
     # Inlet
     # u[1, stepindy:end-1] = LinRange(0, uref, Ny - stepindy + 2)
-    u[1, (stepindy+1):end] .= u_ref
+    # if parainlet != None
+    u[1, :] = parainlet
+    # else
+    #     u[1, (stepindy+1):end] .= u_ref
+    # end
     u[1, 1:stepindy] .= 0
     # P[2, :] = P[3, :]
     P[1, :] = P[2, :]
@@ -78,53 +125,57 @@ function apply_BC!(u, v, P, P_ref, u_ref, dx, dy, stepindx, stepindy, Ny)
     # P[1:stepindx-1, 1:stepindy-1] .= 1
 end
 
+scaling = Nx*Ny - (stepindx-1)*(stepindy-1)
 
 begin
     alpha_p = 0.05
     alpha_u = 0.1
     alpha_v = 0.1
-    Re = 400
     uref = 1
     Pref = 0
-    u = zeros(Nx + 2, Ny + 2)
-    v = zeros(Nx + 2, Ny + 2)
-    P = zeros(Nx + 2, Ny + 2)
-    # @load "warmup$Re.jld2" u v P
+    # u = zeros(Nx + 2, Ny + 2)
+    # v = zeros(Nx + 2, Ny + 2)
+    # P = zeros(Nx + 2, Ny + 2)
+    # inlet = para_profile(y, stepindy, step_height, Ny)
+    inlet = para_profile(y, stepindy, step_height, Ny, dy)
+    re_length = 0
+    # @load "warmup_actual_dim$Re.jld2" u v P x y stepindx stepindy
 
-    apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy, Ny)
+    apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy, Ny, inlet)
 
-    # kkk = Plots.contourf(x, y, P',
-    #     xlabel="x",
-    #     ylabel="y",
-    #     title="P (initial)",
-    #     color=:viridis,
-    #     levels=200,          # number of contour levels; adjust as needed
-    #     linewidth=0,
-    #     aspect_ratio=1,
-    #     # clims=(-clim, clim)
-    #     xlims=[(stepindx - 10) * dx, (stepindx * 2) * dx],
-    #     ylims=[-dy, 2]
-    # )
-    # Plots.hline!([step_height], color=:black, label=:false)
-    # Plots.vline!([step_length], color=:black, label=:false)
-    # Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
-    # Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
-    # display(kkk)
+    kkk = Plots.contourf(x, y, P',
+        xlabel="x",
+        ylabel="y",
+        title="P (initial)",
+        color=:viridis,
+        levels=50,          # number of contour levels; adjust as needed
+        linewidth=0,
+        # aspect_ratio=1,
+        # clims=(-clim, clim)
+        xlims=[(stepindx - 10) * dx, (stepindx * 2) * dx],
+        ylims=[-dy, 1]
+    )
+    Plots.hline!([step_height], color=:black, label=:false)
+    Plots.vline!([step_length], color=:black, label=:false)
+    Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
+    Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
+    display(kkk)
     # sakdw
+    count = 0
 
 
     for k in 1:100000
-        # av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        # au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients(u, v, dx, dy, Re, Nx, Ny)
-        # av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients_upwind(u, v, dx, dy, Nx, Ny, Re)
-        # au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients_upwind(u, v, dx, dy, Nx, Ny, Re)
-        av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
-        au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
-        # vstar = solvers.y_momentum_GS_returning_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, alpha_v, 2000)
-        # ustar = solvers.x_momentum_GS_returning_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, alpha_u, 2000)
+
+        if upwind
+            av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
+            au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
+        else
+            av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients_central_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
+            au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1 = solvers.u_coefficients_central_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
+        end
+
         vstar = solvers.y_momentum_upwind_step(v, P, dx, Nx, Ny, av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1, stepindx, stepindy, alpha_v, 100)
         ustar = solvers.x_momentum_upwind_step(u, P, dy, Nx, Ny, au_ij, au_ip1j, au_im1j, au_ijp1, au_ijm1, stepindx, stepindy, alpha_u, 100)
-        # solvers.x_momentum_upwind!(ustar, v, P, dx, dy, Nx, Ny, Re, U_inlet)
         p_prime, b = solvers.pressure_correction_step(ustar, vstar, dx, dy, Nx, Ny, au_ij, av_ij, stepindx, stepindy, alpha_p, 200)
 
         P = P + alpha_p * p_prime
@@ -143,15 +194,16 @@ begin
 
         u = ustar + uc #* alpha_u
         v = vstar + vc #* alpha_v
+        scaled_b = sqrt(b/scaling)
 
-        apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy, Ny)
+        apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy, Ny, inlet)
 
 
         # error = max(norm(uc) / norm(u), norm(vc) / norm(v))
         error = max(maximum(abs.(uc)), maximum(abs.(vc)))
 
         if k % 10 == 0
-            println("Iteration $k: Error=$error, b=$b")
+            println("Iteration $k: Error=$error, b2=$b, scaled_b=$scaled_b")
             println(", pprime max = ", maximum(abs.(p_prime)))
             println("ustar max = $(maximum(abs.(ustar)))")
             println("vstar max = $(maximum(abs.(vstar)))")
@@ -159,17 +211,17 @@ begin
             if k % 10 != 0
                 continue
             end
-            lal = Plots.contourf(x, y, P',
+            lal = Plots.contourf(x, y, u',
                 xlabel="x",
                 ylabel="y",
-                title="P (Iteration $k)",
+                title="u (Iteration $k)",
                 color=:viridis,
                 levels=200,          # number of contour levels; adjust as needed
                 linewidth=0,
                 aspect_ratio=1,
                 # clims=(-clim, clim)
-                # xlims=[0, (3 * stepindx) * dx],
-                # ylims=[-dy, 2]
+                xlims=[0, (stepindx * 2) * dx],
+                ylims=[-dy, 1]
             )
             # Plots.hline!([step_height], color=:black, label=:false)
             # Plots.vline!([step_length], color=:black, label=:false)
@@ -185,12 +237,25 @@ begin
             throw(ErrorException("P is diverging."))
         end
         if k % 100 == 0
-            @save "warmup$Re.jld2" u v P x y stepindx stepindy
+            @save "warmup_actual_dim$Re.jld2" u v P x y stepindx stepindy Nx Ny dx dy
         end
-        if b <= 1e-12 #error <= 1e-10 || 
-            print("Converged in $k iterations. error = $error")
 
-            break
+        if k > 100
+            reattach = convert(Int32, stepindx .+ findfirst(z -> z > 0, u[(stepindx+1):end, 2]))
+            re_length_new = x[reattach] - x[stepindx]
+            delta = abs(re_length - re_length_new)
+            re_length = re_length_new
+            if delta <= 1e-3 && scaled_b<=5e-6
+                count += 1
+            else
+                count = 0
+            end
+
+            if scaled_b <= 2.5e-6 && count>100#error <= 1e-10 || 
+                print("Converged in $k iterations. error = $error")
+
+                break
+            end
         end
 
     end
@@ -201,9 +266,9 @@ end
 # @load "converged$Re.jld2" u v P
 
 reattach = convert(Int32, stepindx .+ findfirst(z -> z > 0, u[(stepindx+1):end, 2]))
-print("reattachment length = $(x[reattach])")
+print("reattachment length = $(x[reattach] - x[stepindx])")
 
-Plots.contourf(x, y, u',
+Plots.contourf(x, y, P',
     xlabel="x",
     ylabel="y",
     title="Final u Field (Re = $Re)",
@@ -235,6 +300,7 @@ Plots.contourf(x, y, sqrt.(u .* u + v .* v)',
 )
 
 Plots.plot(u[30, :], y)
+
 
 
 
