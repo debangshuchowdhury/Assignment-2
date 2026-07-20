@@ -40,11 +40,11 @@ begin
     L2_phys = 12 * H_phys    # downstream length
 
     upwind = false
-    Re = 168.8
+    Re = 292
     Ly = 1.0
     Lx = (L1_phys + L2_phys) / H_phys
-    Nx = round(Int32, Lx/(0.9 * 1.5/(Re*1.5))) # round(Int32, Ny * (Lx / Ly)) # 
-    Ny = 75 #round(Int32, Nx/10)
+    Nx = round(Int32, Lx/(0.9 * 1/(Re*1.5))) # round(Int32, Ny * (Lx / Ly)) # 
+    Ny = 100 #round(Int32, Nx/10)
     println("nx=$Nx, ny=$Ny")
     dx = Lx / Nx
     dy = Ly / Ny
@@ -128,9 +128,9 @@ end
 scaling = Nx*Ny - (stepindx-1)*(stepindy-1)
 
 begin
-    alpha_p = 0.05
-    alpha_u = 0.1
-    alpha_v = 0.1
+    alpha_p = 0.025
+    alpha_u = 0.05
+    alpha_v = 0.05
     uref = 1
     Pref = 0
     # u = zeros(Nx + 2, Ny + 2)
@@ -140,31 +140,31 @@ begin
     inlet = para_profile(y, stepindy, step_height, Ny, dy)
     re_length = 0
     # @load "warmup_actual_dim$Re.jld2" u v P x y stepindx stepindy
-
+    # println(size(u))
     apply_BC!(u, v, P, Pref, uref, dx, dy, stepindx, stepindy, Ny, inlet)
 
-    kkk = Plots.contourf(x, y, P',
-        xlabel="x",
-        ylabel="y",
-        title="P (initial)",
-        color=:viridis,
-        levels=50,          # number of contour levels; adjust as needed
-        linewidth=0,
-        # aspect_ratio=1,
-        # clims=(-clim, clim)
-        xlims=[(stepindx - 10) * dx, (stepindx * 2) * dx],
-        ylims=[-dy, 1]
-    )
-    Plots.hline!([step_height], color=:black, label=:false)
-    Plots.vline!([step_length], color=:black, label=:false)
-    Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
-    Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
-    display(kkk)
+    # kkk = Plots.contourf(x, y, P',
+    #     xlabel="x",
+    #     ylabel="y",
+    #     title="P (initial)",
+    #     color=:viridis,
+    #     levels=50,          # number of contour levels; adjust as needed
+    #     linewidth=0,
+    #     # aspect_ratio=1,
+    #     # clims=(-clim, clim)
+    #     xlims=[(stepindx - 10) * dx, (stepindx * 2) * dx],
+    #     ylims=[-dy, 1]
+    # )
+    # Plots.hline!([step_height], color=:black, label=:false)
+    # Plots.vline!([step_length], color=:black, label=:false)
+    # Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
+    # Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
+    # display(kkk)
     # sakdw
     count = 0
 
 
-    for k in 1:100000
+    for k in 1:10000
 
         if upwind
             av_ij, av_ip1j, av_im1j, av_ijp1, av_ijm1 = solvers.v_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy)
@@ -236,22 +236,23 @@ begin
             print("iteration $k: max P = $(maximum(P))")
             throw(ErrorException("P is diverging."))
         end
-        if k % 100 == 0
+        if k % 10 == 0 && scaled_b<=8e-6
             @save "warmup_actual_dim$Re.jld2" u v P x y stepindx stepindy Nx Ny dx dy
         end
 
-        if k > 100
+        if k > 20
             reattach = convert(Int32, stepindx .+ findfirst(z -> z > 0, u[(stepindx+1):end, 2]))
             re_length_new = x[reattach] - x[stepindx]
             delta = abs(re_length - re_length_new)
             re_length = re_length_new
+
             if delta <= 1e-3 && scaled_b<=5e-6
                 count += 1
             else
                 count = 0
             end
 
-            if scaled_b <= 2.5e-6 && count>100#error <= 1e-10 || 
+            if scaled_b <= 2.5e-6 && count>25#error <= 1e-10 || 
                 print("Converged in $k iterations. error = $error")
 
                 break
@@ -284,6 +285,11 @@ Plots.contourf(x, y, P',
 Plots.plot!([0, step_length], [step_height, step_height], color=:black, label=:false)
 Plots.plot!([step_length, step_length], [0, step_height], color=:black, label=:false)
 Plots.vline!([x[reattach]], color=:red, label=:false)
+
+x1 = let c = u[(stepindx+1):(end-3), 2], i = findlast(<(0), c);
+    i === nothing ? 0.0 : x[stepindx+i] + (x[stepindx+i+1]-x[stepindx+i])*c[i]/(c[i]-c[i+1]) - x[stepindx]
+end
+println(x1)
 
 
 argmin()

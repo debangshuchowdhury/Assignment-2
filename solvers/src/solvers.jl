@@ -391,14 +391,14 @@ function u_coefficients_central_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepind
                 continue
             end
             if i == stepindx+1 && j<=stepindy
-                kw = 0
+                kw = 1
                 au_im1j[i, j] = 0
             else
                 kw = 1
                 au_im1j[i, j] = 0.25 * dy * (u[i, j] + u[i-1, j])
             end
             if j == stepindy + 1 && i <= stepindx
-                ks = 0
+                ks = 1
                 au_ijm1[i, j] = 0
             else
                 ks = 1
@@ -436,14 +436,14 @@ function v_coefficients_central_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepind
                 continue
             end
             if i == stepindx + 1 && j <= stepindy
-                kw = 0
+                kw = 1
                 av_im1j[i, j] = 0
             else
                 kw = 1
                 av_im1j[i, j] = 0.25 * dy * (u[i-1, j] + u[i-1, j+1])
             end
             if j == stepindy + 1 && i <= stepindx
-                ks = 0
+                ks = 1
                 av_ijm1[i, j] = 0
             else
                 ks = 1
