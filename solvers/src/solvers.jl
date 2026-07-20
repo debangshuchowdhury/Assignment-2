@@ -411,9 +411,9 @@ function u_coefficients_central_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepind
             au_ij[i, j] += (1+kw)*(dy/dx)/Re + (1 + ks)*(dx/dy)/Re
 
             au_ip1j[i, j] += (1 / Re) * (dy / dx)
-            au_im1j[i, j] += (1 / Re) * (dy / dx) * ks
+            au_im1j[i, j] += (1 / Re) * (dy / dx) * kw
             au_ijp1[i, j] += (1 / Re) * (dx / dy)
-            au_ijm1[i, j] += (1 / Re) * (dx / dy) * kw
+            au_ijm1[i, j] += (1 / Re) * (dx / dy) * ks
         end
     end
 
