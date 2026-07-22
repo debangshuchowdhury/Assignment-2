@@ -481,7 +481,7 @@ function u_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy
             end
             if i == stepindx + 1 && j <= stepindy
                 au_im1j[i, j] = 0
-                kw = 0
+                kw = 1
             else
                 adv_w = 0.5 * (u[i-1, j] + u[i, j])
                 au_im1j[i, j] = maximum([0, adv_w]) * dy
@@ -489,7 +489,7 @@ function u_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy
             end
             if j == stepindy + 1 && i <= stepindx
                 au_ijm1[i, j] = 0
-                ks = 0
+                ks = 1
             else
                 adv_s = 0.5 * (v[i, j-1] + v[i+1, j-1])
                 au_ijm1[i, j] = maximum([0, adv_s]) * dx
@@ -532,7 +532,7 @@ function v_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy
             end
             if i == stepindx + 1 && j <= stepindy
                 av_im1j[i, j] = 0
-                kw = 0
+                kw = 1
             else
                 adv_w = 0.5 * (u[i-1, j] + u[i-1, j+1])
                 av_im1j[i, j] = maximum([0, adv_w]) * dy
@@ -540,7 +540,7 @@ function v_coefficients_upwind_step(u, v, dx, dy, Nx, Ny, Re, stepindx, stepindy
             end
             if j == stepindy + 1 && i <= stepindx
                 av_ijm1[i, j] = 0
-                ks = 0
+                ks = 1
             else
                 adv_s = 0.5 * (v[i, j-1] + v[i, j])
                 av_ijm1[i, j] = maximum([0, adv_s]) * dx
